@@ -1,180 +1,143 @@
 import 'package:flutter/material.dart';
-import '../../models/domain_model.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../models/domain_model.dart';
+import '../providers/domain_feed_notifier.dart';
+import '../widgets/record_card_factory.dart';
 
-class LawScreen extends StatelessWidget {
+class LawScreen extends ConsumerWidget {
   final ResultDomain domain;
   final Subcategory subcategory;
 
   const LawScreen({super.key, required this.domain, required this.subcategory});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final feedState = ref.watch(domainFeedProvider(domain.type));
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: Text(subcategory.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
-        backgroundColor: const Color(0xFF92400E),
+        title: Text(subcategory.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2, fontSize: 16)),
+        centerTitle: true,
+        backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
         elevation: 0,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text('LANDMARK VERDICTS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 12, color: Colors.grey)),
-          const SizedBox(height: 12),
-          _buildVerdictCard(
-            'Electoral Bonds Scheme — Struck Down',
-            'Supreme Court of India — 5 Judge Bench',
-            'Unanimous judgment declared electoral bonds unconstitutional. SBI ordered to submit donor data within 3 weeks.',
-            'June 1, 2026',
-            Icons.gavel,
-            const Color(0xFF92400E),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.read(domainFeedProvider(domain.type).notifier).refresh();
+            },
           ),
-          _buildVerdictCard(
-            'Right to Privacy — Data Protection',
-            'Madras High Court — Single Bench',
-            'Directed state government to implement personal data protection guidelines per IT Act amendment.',
-            'May 30, 2026',
-            Icons.security,
-            const Color(0xFF3B82F6),
-          ),
-          _buildVerdictCard(
-            'Urban Land Ceiling Act — Repeal Case',
-            'Bombay High Court — Division Bench',
-            'Dismissed petition challenging the repeal of ULCA. Full judgment attached.',
-            'May 28, 2026',
-            Icons.location_city,
-            const Color(0xFF10B981),
-          ),
-          const SizedBox(height: 24),
-          const Text('ACTIVE GOVERNMENT TENDERS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 12, color: Colors.grey)),
-          const SizedBox(height: 12),
-          _buildTenderCard('IT Infrastructure — MoE', '₹840 Cr', 'Ministry of Education', 'Bid Close: June 20, 2026', true),
-          _buildTenderCard('Smart City Roads — CPWD', '₹1,240 Cr', 'Central Public Works Dept.', 'Bid Close: June 30, 2026', true),
-          _buildTenderCard('Defence Electronics — DRDO', '₹3,400 Cr', 'Ministry of Defence', 'Evaluation in Progress', false),
-          const SizedBox(height: 24),
-          const Text('CIVIL SERVICES MERIT LISTS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 12, color: Colors.grey)),
-          const SizedBox(height: 12),
-          _buildMeritCard('TN Group 2A — Final Select List', '1,200 Posts', 'Declared May 30, 2026'),
-          _buildMeritCard('Kerala PSC — LDC Rank List 2026', '4,500 Posts', 'Rank List Published June 1'),
-          _buildMeritCard('TNPSC Group 4 Waitlist', '800 Posts', 'Activation Expected July 2026'),
         ],
       ),
-    );
-  }
+      body: feedState.when(
+        data: (feedItems) {
+          if (feedItems.isEmpty) {
+            return _buildEmptyState();
+          }
 
-  Widget _buildVerdictCard(String title, String court, String summary, String date, IconData icon, Color color) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+          return ListView.builder(
+            padding: const EdgeInsets.all(20),
+            itemCount: feedItems.length,
+            itemBuilder: (context, index) {
+              final item = feedItems[index];
+              return _buildWorkspaceSection(context, item);
+            },
+          );
+        },
+        loading: () => _buildSkeletonLoader(),
+        error: (err, stack) => Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: Icon(icon, color: color, size: 18),
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text('Failed to load: $err', style: const TextStyle(color: Colors.red)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ref.read(domainFeedProvider(domain.type).notifier).refresh(),
+                child: const Text('Retry'),
               ),
-              const SizedBox(width: 10),
-              Expanded(child: Text(court, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700))),
-              Text(date, style: const TextStyle(color: Colors.grey, fontSize: 11)),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF0F172A))),
-          const SizedBox(height: 6),
-          Text(summary, style: const TextStyle(color: Colors.grey, fontSize: 12, height: 1.5)),
-          const SizedBox(height: 12),
-          const Divider(),
-          InkWell(
-            onTap: () {},
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.picture_as_pdf, color: color, size: 16),
-                  const SizedBox(width: 8),
-                  Text('View Full Judgment', style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 13)),
-                ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.gavel, size: 80, color: Colors.grey),
+            const SizedBox(height: 24),
+            Text(
+              'No ${domain.name} results published yet.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey, fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Be the first to create a workspace!',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkspaceSection(BuildContext context, DomainFeedItem item) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12, top: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.account_balance, size: 16, color: Colors.grey),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  item.workspaceName,
+                  style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1.2),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+        ...item.records.map((record) => InkWell(
+          onTap: () {
+            context.push('/workspace/${item.workspaceId}?name=${Uri.encodeComponent(item.workspaceName)}');
+          },
+          child: RecordCardFactory(domainType: domain.type, record: record),
+        )),
+        const SizedBox(height: 24),
+      ],
     );
   }
 
-  Widget _buildTenderCard(String title, String value, String dept, String deadline, bool isOpen) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: (isOpen ? Colors.green : Colors.orange).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(isOpen ? 'OPEN' : 'EVAL', style: TextStyle(color: isOpen ? Colors.green : Colors.orange, fontWeight: FontWeight.w900, fontSize: 10)),
+  Widget _buildSkeletonLoader() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: 4,
+      itemBuilder: (context, index) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          height: 100,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF0F172A))),
-                Text(dept, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                Text(deadline, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-              ],
-            ),
-          ),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF92400E))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMeritCard(String title, String posts, String status) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.list_alt, color: Color(0xFF92400E), size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Color(0xFF0F172A))),
-                Text(posts, style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12)),
-                Text(status, style: const TextStyle(color: Colors.grey, fontSize: 11)),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right, color: Colors.grey),
-        ],
-      ),
+          child: const Center(child: CircularProgressIndicator(color: Colors.grey)),
+        );
+      },
     );
   }
 }

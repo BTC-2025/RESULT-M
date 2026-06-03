@@ -22,7 +22,7 @@ public class SearchService {
     private final SearchRepository searchRepository;
     private final SearchAnalyticsRepository analyticsRepository;
 
-    public PaginatedSearchResponse globalSearch(String query, int page, int size, User user) {
+    public PaginatedSearchResponse globalSearch(String query, UUID targetWorkspaceId, int page, int size, User user) {
         if (query == null || query.trim().isEmpty()) {
             return PaginatedSearchResponse.builder()
                     .results(List.of())
@@ -36,7 +36,7 @@ public class SearchService {
         UUID userId = user != null ? user.getId() : null;
         int offset = page * size;
         
-        List<SearchResult> results = searchRepository.globalSearch(query, userId, offset, size);
+        List<SearchResult> results = searchRepository.globalSearch(query, targetWorkspaceId, userId, offset, size);
 
         // Track analytics asynchronously
         trackSearchAsync(query, results.size(), userId, null);

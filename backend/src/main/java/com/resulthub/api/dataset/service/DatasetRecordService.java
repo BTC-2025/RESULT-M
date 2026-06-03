@@ -33,6 +33,7 @@ public class DatasetRecordService {
     private final DatasetSchemaRepository schemaRepository;
     private final WorkspaceMemberRepository memberRepository;
     private final SchemaValidationService validationService;
+    private final com.resulthub.api.security.WorkspaceTokenService workspaceTokenService;
 
     @Transactional
     public RecordResponse createRecord(UUID datasetId, RecordRequest request, User user) {
@@ -91,7 +92,17 @@ public class DatasetRecordService {
         record.setRecordKey(request.getRecordKey());
         record.setRecordTitle(request.getRecordTitle());
         record.setTags(request.getTags());
-        record.setData(request.getData());
+        
+        if (request.getData() != null) {
+            java.util.Map<String, Object> existingData = record.getData();
+            if (existingData == null) {
+                existingData = new java.util.HashMap<>();
+            } else {
+                existingData = new java.util.HashMap<>(existingData);
+            }
+            existingData.putAll(request.getData());
+            record.setData(existingData);
+        }
 
         record = recordRepository.save(record);
         log.info("AUDIT: RECORD_UPDATED - Record {} updated by User {}", record.getId(), user.getId());
@@ -117,6 +128,38 @@ public class DatasetRecordService {
         if (member.getRole() == WorkspaceRole.VIEWER) {
             throw new RuntimeException("Access denied. VIEWER cannot modify records.");
         }
+    }
+
+    public RecordResponse lookupRecord(UUID datasetId, String rollNumber, String dateOfBirth, String authHeader) {
+        if ((rollNumber == null || rollNumber.trim().isEmpty()) && (dateOfBirth == null || dateOfBirth.trim().isEmpty())) {
+            throw new IllegalArgumentException("Must provide either rollNumber or dateOfBirth");
+        }
+
+        Dataset dataset = datasetRepository.findByIdAndNotDeleted(datasetId)
+                .orElseThrow(() -> new RuntimeException("Dataset not found"));
+
+        if (dataset.getWorkspace().getVisibility() == com.resulthub.api.workspace.enums.VisibilityMode.PRIVATE) {
+            throw new RuntimeException("Access denied. Private workspace results cannot be looked up publicly.");
+        }
+
+        if (dataset.getWorkspace().getVisibility() == com.resulthub.api.workspace.enums.VisibilityMode.PASSWORD_PROTECTED) {
+            if (authHeader == null || !authHeader.startsWith("Workspace ")) {
+                throw new RuntimeException("Access denied. Missing workspace token.");
+            }
+            String token = authHeader.substring(10);
+            if (!workspaceTokenService.isTokenValid(token)) {
+                throw new RuntimeException("Access denied. Invalid workspace token.");
+            }
+            String tokenWorkspaceId = workspaceTokenService.extractWorkspaceId(token);
+            if (!tokenWorkspaceId.equals(dataset.getWorkspace().getId().toString())) {
+                throw new RuntimeException("Access denied. Token does not match dataset's workspace.");
+            }
+        }
+
+        DatasetRecord record = recordRepository.lookupRecord(datasetId, rollNumber, dateOfBirth)
+                .orElseThrow(() -> new RuntimeException("No result found for the provided details"));
+
+        return mapToResponse(record);
     }
 
     private RecordResponse mapToResponse(DatasetRecord record) {

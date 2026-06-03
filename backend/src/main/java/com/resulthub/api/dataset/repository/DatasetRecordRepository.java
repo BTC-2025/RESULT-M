@@ -20,4 +20,9 @@ public interface DatasetRecordRepository extends JpaRepository<DatasetRecord, UU
 
     @Query("SELECT r FROM DatasetRecord r WHERE r.dataset.id = :datasetId AND r.recordKey = :recordKey AND r.deletedAt IS NULL")
     Optional<DatasetRecord> findByDatasetIdAndRecordKeyAndNotDeleted(@Param("datasetId") UUID datasetId, @Param("recordKey") String recordKey);
+
+    @Query(value = "SELECT * FROM dataset_records WHERE dataset_id = :datasetId AND deleted_at IS NULL AND " +
+            "((:rollNumber IS NOT NULL AND LOWER(data->>'rollNumber') = LOWER(:rollNumber)) OR " +
+            "(:dateOfBirth IS NOT NULL AND data->>'dateOfBirth' = :dateOfBirth)) LIMIT 1", nativeQuery = true)
+    Optional<DatasetRecord> lookupRecord(@Param("datasetId") UUID datasetId, @Param("rollNumber") String rollNumber, @Param("dateOfBirth") String dateOfBirth);
 }

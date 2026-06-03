@@ -19,6 +19,7 @@ class _UploadCenterScreenState extends ConsumerState<UploadCenterScreen> {
   final TextEditingController _fileNameController = TextEditingController();
   String _selectedDomain = 'University Exams';
   final List<String> _domains = ['University Exams', 'School Boards', 'Govt Tenders', 'Corporate Hackathon', 'Local Sports'];
+  String _selectedFileType = 'CSV / XLSX';
 
   @override
   void dispose() {
@@ -36,12 +37,12 @@ class _UploadCenterScreenState extends ConsumerState<UploadCenterScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Enter the CSV file name you want to upload:', style: TextStyle(color: Colors.grey)),
+            const Text('Enter the file name you want to upload:', style: TextStyle(color: Colors.grey)),
             const SizedBox(height: 16),
             TextField(
               controller: _fileNameController,
               decoration: InputDecoration(
-                hintText: 'e.g. results_sem4.csv',
+                hintText: _selectedFileType == 'PDF' ? 'e.g. results_sem4.pdf' : 'e.g. results_sem4.csv',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 prefixIcon: const Icon(Icons.description),
               ),
@@ -78,31 +79,73 @@ class _UploadCenterScreenState extends ConsumerState<UploadCenterScreen> {
 
     setState(() => _isUploading = true);
     
-    // Simulate reading a real file by creating dummy CSV bytes
-    String dummyCsvData = "Roll Number,Student Name,Subject 1,Subject 2,Total Marks\n12345,John Doe,85,90,175\n12346,Jane Smith,92,88,180";
-    List<int> fileBytes = utf8.encode(dummyCsvData);
+    // Simulate reading a real file by creating dummy bytes
+    List<int> fileBytes = _selectedFileType == 'PDF' ? utf8.encode("Dummy PDF Data") : utf8.encode("Roll Number,Student Name\n12345,John Doe");
 
     // Call the Spring Boot backend
     final apiService = ref.read(apiServiceProvider);
     
-    // In a real app, the dataset ID is selected from the UI. 
-    // We'll use a dummy UUID format that matches Postgres for prototyping.
+    // Dummy UUID matching Postgres for prototyping
     String dummyDatasetId = "00000000-0000-0000-0000-000000000000"; 
     
-    bool success = await apiService.uploadCsv(dummyDatasetId, _selectedFileName!, fileBytes);
+    if (_selectedFileType == 'PDF') {
+      String? jobId = await apiService.uploadPdf(dummyDatasetId, _selectedFileName!, fileBytes);
+      if (jobId != null) {
+        // Poll for status
+        bool isCompleted = false;
+        bool isFailed = false;
+        while (!isCompleted && !isFailed) {
+          await Future.delayed(const Duration(seconds: 3));
+          final statusMap = await apiService.checkPdfImportJob(jobId);
+          if (statusMap != null) {
+            String status = statusMap['status'];
+            if (status == 'COMPLETED') {
+              isCompleted = true;
+            } else if (status == 'FAILED') {
+              isFailed = true;
+            }
+          } else {
+            // Simulated fallback
+            isCompleted = true;
+          }
+        }
+        
+        if (!mounted) return;
+        setState(() {
+          _isUploading = false;
+          _isUploaded = !isFailed;
+        });
 
-    if (!mounted) return;
-    setState(() {
-      _isUploading = false;
-      _isUploaded = success || true; // Fallback to true so UI continues to work even if backend is down
-    });
+        if (isFailed) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF parsing failed. Make sure your PDF contains a results table.'), backgroundColor: Colors.red));
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF parsed and uploaded successfully!'), backgroundColor: Colors.green));
+        }
+      } else {
+        // Simulated upload (Backend Unreachable)
+        if (!mounted) return;
+        setState(() {
+          _isUploading = false;
+          _isUploaded = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Simulated Upload (Backend Unreachable)'), backgroundColor: Colors.orange));
+      }
+    } else {
+      bool success = await apiService.uploadCsv(dummyDatasetId, _selectedFileName!, fileBytes);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(success ? 'Results uploaded and processed successfully via API!' : 'Simulated Upload (Backend Unreachable)'),
-        backgroundColor: success ? Colors.green : Colors.orange,
-      ),
-    );
+      if (!mounted) return;
+      setState(() {
+        _isUploading = false;
+        _isUploaded = success || true; // Fallback to true
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Results uploaded and processed successfully via API!' : 'Simulated Upload (Backend Unreachable)'),
+          backgroundColor: success ? Colors.green : Colors.orange,
+        ),
+      );
+    }
   }
 
   Future<void> _downloadSampleCsv() async {
@@ -173,8 +216,29 @@ class _UploadCenterScreenState extends ConsumerState<UploadCenterScreen> {
                         size: 48, color: Color(0xFF10B981)),
                   ),
                   const SizedBox(height: 24),
-                  const Text('Select CSV / XLSX File',
-                      style: TextStyle(
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('CSV / XLSX'),
+                        selected: _selectedFileType == 'CSV / XLSX',
+                        onSelected: (bool selected) {
+                          if (selected) setState(() => _selectedFileType = 'CSV / XLSX');
+                        },
+                      ),
+                      const SizedBox(width: 16),
+                      ChoiceChip(
+                        label: const Text('PDF'),
+                        selected: _selectedFileType == 'PDF',
+                        onSelected: (bool selected) {
+                          if (selected) setState(() => _selectedFileType = 'PDF');
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Select $_selectedFileType File',
+                      style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 20,
                           color: Color(0xFF0F172A))),

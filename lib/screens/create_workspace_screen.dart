@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 class CreateWorkspaceScreen extends StatefulWidget {
   const CreateWorkspaceScreen({super.key});
@@ -75,6 +76,10 @@ class _CreateWorkspaceScreenState extends State<CreateWorkspaceScreen> {
           ],
         ),
         actions: [
+          TextButton(
+            onPressed: () => Share.share(link, subject: 'Join my ResultHub Workspace!'),
+            child: const Text('Share', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
             onPressed: () { Navigator.pop(ctx); Navigator.pop(context); },

@@ -15,7 +15,7 @@ public class SearchRepository {
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
 
-    public List<SearchResult> globalSearch(String query, UUID userId, int offset, int limit) {
+    public List<SearchResult> globalSearch(String query, UUID targetWorkspaceId, UUID userId, int offset, int limit) {
         String sql = """
             WITH search_query AS (
                 SELECT websearch_to_tsquery('english', :query) AS q
@@ -28,9 +28,9 @@ public class SearchRepository {
                 WHERE sq.q @@ w.search_vector
                   AND w.deleted_at IS NULL
                   AND (
-                      w.visibility = 'PUBLIC' 
-                      OR w.visibility = 'PASSWORD_PROTECTED'
-                      OR (w.visibility = 'PRIVATE' AND :userId IS NOT NULL AND EXISTS (
+                      (:targetWorkspaceId IS NULL AND w.visibility = 'PUBLIC')
+                      OR 
+                      (:targetWorkspaceId IS NOT NULL AND w.id = :targetWorkspaceId::uuid AND :userId IS NOT NULL AND EXISTS (
                           SELECT 1 FROM workspace_members wm WHERE wm.workspace_id = w.id AND wm.user_id = :userId::uuid
                       ))
                   )
@@ -45,9 +45,9 @@ public class SearchRepository {
                   AND d.deleted_at IS NULL AND w.deleted_at IS NULL
                   AND d.status = 'PUBLISHED'
                   AND (
-                      w.visibility = 'PUBLIC' 
-                      OR w.visibility = 'PASSWORD_PROTECTED'
-                      OR (w.visibility = 'PRIVATE' AND :userId IS NOT NULL AND EXISTS (
+                      (:targetWorkspaceId IS NULL AND w.visibility = 'PUBLIC')
+                      OR 
+                      (:targetWorkspaceId IS NOT NULL AND w.id = :targetWorkspaceId::uuid AND :userId IS NOT NULL AND EXISTS (
                           SELECT 1 FROM workspace_members wm WHERE wm.workspace_id = w.id AND wm.user_id = :userId::uuid
                       ))
                   )
@@ -63,9 +63,9 @@ public class SearchRepository {
                   AND r.deleted_at IS NULL AND d.deleted_at IS NULL AND w.deleted_at IS NULL
                   AND d.status = 'PUBLISHED'
                   AND (
-                      w.visibility = 'PUBLIC' 
-                      OR w.visibility = 'PASSWORD_PROTECTED'
-                      OR (w.visibility = 'PRIVATE' AND :userId IS NOT NULL AND EXISTS (
+                      (:targetWorkspaceId IS NULL AND w.visibility = 'PUBLIC')
+                      OR 
+                      (:targetWorkspaceId IS NOT NULL AND w.id = :targetWorkspaceId::uuid AND :userId IS NOT NULL AND EXISTS (
                           SELECT 1 FROM workspace_members wm WHERE wm.workspace_id = w.id AND wm.user_id = :userId::uuid
                       ))
                   )
@@ -81,6 +81,7 @@ public class SearchRepository {
 
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("query", query)
+                .addValue("targetWorkspaceId", targetWorkspaceId != null ? targetWorkspaceId.toString() : null)
                 .addValue("userId", userId != null ? userId.toString() : null)
                 .addValue("limit", limit)
                 .addValue("offset", offset);

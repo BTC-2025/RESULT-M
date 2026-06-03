@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'quick_score_entry_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
@@ -102,9 +103,71 @@ class AdminDashboardScreen extends StatelessWidget {
               const SizedBox(height: 16),
               _buildAlertItem('High Traffic Detected', 'B.E Semester 4 results are driving 10k lookups/min. Infrastructure scaled automatically.', Icons.speed, Colors.orange),
               _buildAlertItem('API Sync Successful', 'Student database synced at 12:00 PM without any packet loss.', Icons.check_circle, const Color(0xFF10B981)),
+              
+              const SizedBox(height: 40),
+              
+              // Live Datasets Section for Quick Updates
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: const [
+                  Text('LIVE DATASETS', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildLiveDatasetItem(context, 'B.E Semester 4 Results', '12,450 records', "dataset-id-1", "record-id-1"),
+              _buildLiveDatasetItem(context, 'Anna University Athletics 2026', 'Scores Updating', "dataset-id-2", "record-id-2"),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildLiveDatasetItem(BuildContext context, String title, String subtitle, String datasetId, String recordId) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: const Color(0xFF10B981).withValues(alpha: 0.1), shape: BoxShape.circle),
+            child: const Icon(Icons.sensors, color: Color(0xFF10B981), size: 20),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF0F172A))),
+                Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              ],
+            ),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E293B),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            icon: const Icon(Icons.flash_on, color: Colors.amberAccent, size: 16),
+            label: const Text('Quick Update', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(
+                builder: (_) => QuickScoreEntryScreen(
+                  workspaceId: "dummy-workspace",
+                  datasetId: datasetId,
+                  recordId: recordId,
+                ),
+              ));
+            },
+          ),
+        ],
       ),
     );
   }

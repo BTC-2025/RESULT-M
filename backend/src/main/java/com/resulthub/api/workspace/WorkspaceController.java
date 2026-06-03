@@ -39,6 +39,13 @@ public class WorkspaceController {
         return ResponseEntity.ok(workspaceService.getWorkspace(id, user, accessCode));
     }
 
+    @GetMapping("/slug/{slug}")
+    public ResponseEntity<WorkspaceResponse> getWorkspaceBySlug(
+            @PathVariable String slug
+    ) {
+        return ResponseEntity.ok(workspaceService.getWorkspaceBySlug(slug));
+    }
+
     @PostMapping("/{id}/unlock")
     public ResponseEntity<com.resulthub.api.workspace.dto.UnlockWorkspaceResponse> unlockWorkspace(
             @PathVariable UUID id,
@@ -81,5 +88,23 @@ public class WorkspaceController {
     ) {
         workspaceService.deleteWorkspace(id, user);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/share-link")
+    public ResponseEntity<com.resulthub.api.workspace.dto.ShareLinkResponse> getShareLink(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal User user
+    ) {
+        String link = workspaceService.generateShareLink(id, user);
+        return ResponseEntity.ok(new com.resulthub.api.workspace.dto.ShareLinkResponse(link));
+    }
+
+    @PostMapping("/{id}/regenerate-code")
+    public ResponseEntity<com.resulthub.api.workspace.dto.ShareLinkResponse> regenerateCode(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal User user
+    ) {
+        String link = workspaceService.regenerateAccessCode(id, user);
+        return ResponseEntity.ok(new com.resulthub.api.workspace.dto.ShareLinkResponse(link));
     }
 }

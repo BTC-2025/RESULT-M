@@ -63,4 +63,14 @@ public class DatasetRecordController {
         recordService.deleteRecord(recordId, user);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/datasets/{datasetId}/records/lookup")
+    public ResponseEntity<RecordResponse> lookupRecord(
+            @PathVariable UUID datasetId,
+            @RequestParam(required = false) String rollNumber,
+            @RequestParam(required = false) String dateOfBirth,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
+    ) {
+        return ResponseEntity.ok(recordService.lookupRecord(datasetId, rollNumber, dateOfBirth, authHeader));
+    }
 }
