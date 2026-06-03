@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: resulthub-api
+  
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/resulthub}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASS:password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate # Flyway handles schema
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:test-client-id}
+            client-secret: ${GOOGLE_CLIENT_SECRET:test-client-secret}
+
+server:
+  port: 8080
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    com.resulthub: DEBUG
+
+jwt:
+  secret: ${JWT_SECRET:verylongfallbacksecretthatshouldbechangedinprod99999999999999}
+  expiration: ${JWT_EXPIRATION:86400000}       # 1 day
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000} # 7 days
+  workspace:
+    secret: ${WORKSPACE_JWT_SECRET:workspaceverylongfallbacksecretthatshouldbechangedinprod9999999999}
+    expiration: ${WORKSPACE_JWT_EXPIRATION:14400000} # 4 hours
