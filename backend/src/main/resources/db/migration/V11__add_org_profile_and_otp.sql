@@ -1,0 +1,12 @@
+ALTER TABLE users ADD COLUMN phone_number VARCHAR(255);
+ALTER TABLE users ADD COLUMN organization_type VARCHAR(255);
+ALTER TABLE users ADD COLUMN website VARCHAR(255);
+ALTER TABLE users ADD COLUMN city VARCHAR(255);
+
+CREATE TABLE password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    otp VARCHAR(10) NOT NULL,
+    expiry_date TIMESTAMP NOT NULL,
+    used BOOLEAN NOT NULL DEFAULT FALSE
+);

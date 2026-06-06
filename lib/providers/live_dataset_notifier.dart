@@ -2,34 +2,70 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/storage/secure_storage.dart';
 import '../services/api_service.dart';
 
 // Family provider that creates a unique notifier for each datasetId
-final liveDatasetProvider = StateNotifierProvider.family<LiveDatasetNotifier, AsyncValue<List<dynamic>>, String>((ref, datasetId) {
-  final apiService = ref.watch(apiServiceProvider);
-  return LiveDatasetNotifier(datasetId, apiService);
-});
+final liveDatasetProvider =
+    AsyncNotifierProvider.family<LiveDatasetNotifier, List<dynamic>, String>(
+      LiveDatasetNotifier.new,
+    );
 
-class LiveDatasetNotifier extends StateNotifier<AsyncValue<List<dynamic>>> with WidgetsBindingObserver {
-  final String datasetId;
-  final ApiService apiService;
+class LiveDatasetNotifier extends AsyncNotifier<List<dynamic>>
+    with WidgetsBindingObserver {
+  final String datasetKey;
+  late ApiService apiService;
   Timer? _timer;
+  Timer? _streamRefreshDebounce;
+  StreamSubscription<String>? _eventSubscription;
   bool _isPolling = false;
+  bool _isStreaming = false;
 
-  LiveDatasetNotifier(this.datasetId, this.apiService) : super(const AsyncValue.loading()) {
-    WidgetsBinding.instance.addObserver(this);
-    _initialFetch();
+  LiveDatasetNotifier(this.datasetKey);
+
+  String get datasetId => datasetKey.split('|').first;
+  String? get workspaceId {
+    final parts = datasetKey.split('|');
+    return parts.length > 1 && parts[1].isNotEmpty ? parts[1] : null;
   }
 
-  void _initialFetch() async {
+  Future<String?> _workspaceToken() async {
+    final id = workspaceId;
+    if (id == null) return null;
+    return SecureStorage().getWorkspaceToken(id);
+  }
+
+  @override
+  Future<List<dynamic>> build() async {
+    apiService = ref.watch(apiServiceProvider);
+    WidgetsBinding.instance.addObserver(this);
+    ref.onDispose(() {
+      _stopPolling();
+      _stopStreaming();
+      WidgetsBinding.instance.removeObserver(this);
+    });
+
+    final records = await apiService.fetchDatasetRecords(
+      datasetId,
+      workspaceToken: await _workspaceToken(),
+    );
+    _startStreaming();
+    _startPolling();
+    return records;
+  }
+
+  Future<void> _initialFetch() async {
     try {
-      final records = await apiService.fetchDatasetRecords(datasetId);
-      if (mounted) {
+      final records = await apiService.fetchDatasetRecords(
+        datasetId,
+        workspaceToken: await _workspaceToken(),
+      );
+      if (ref.mounted) {
         state = AsyncValue.data(records);
         _startPolling();
       }
     } catch (e, stack) {
-      if (mounted) {
+      if (ref.mounted) {
         state = AsyncValue.error(e, stack);
       }
     }
@@ -48,18 +84,61 @@ class LiveDatasetNotifier extends StateNotifier<AsyncValue<List<dynamic>>> with 
     _timer = null;
   }
 
-  Future<void> _silentFetch() async {
-    if (!mounted) return;
+  Future<void> _startStreaming() async {
+    if (_isStreaming) return;
+    _isStreaming = true;
+
     try {
-      final records = await apiService.fetchDatasetRecords(datasetId);
-      if (mounted) {
+      final stream = await apiService.streamDatasetRecordEvents(
+        datasetId,
+        workspaceToken: await _workspaceToken(),
+      );
+      _eventSubscription = stream.listen(
+        (_) => _scheduleStreamRefresh(),
+        onError: (error) {
+          developer.log('Dataset event stream failed for $datasetId: $error');
+          _stopStreaming();
+        },
+        onDone: _stopStreaming,
+        cancelOnError: true,
+      );
+    } catch (e) {
+      developer.log('Unable to start dataset event stream for $datasetId: $e');
+      _stopStreaming();
+    }
+  }
+
+  void _scheduleStreamRefresh() {
+    _streamRefreshDebounce?.cancel();
+    _streamRefreshDebounce = Timer(
+      const Duration(milliseconds: 350),
+      _silentFetch,
+    );
+  }
+
+  void _stopStreaming() {
+    _isStreaming = false;
+    _streamRefreshDebounce?.cancel();
+    _streamRefreshDebounce = null;
+    _eventSubscription?.cancel();
+    _eventSubscription = null;
+  }
+
+  Future<void> _silentFetch() async {
+    if (!ref.mounted) return;
+    try {
+      final records = await apiService.fetchDatasetRecords(
+        datasetId,
+        workspaceToken: await _workspaceToken(),
+      );
+      if (ref.mounted) {
         // Only update state; no loading spinner
         state = AsyncValue.data(records);
       }
     } catch (e) {
       developer.log('Silent fetch failed for dataset $datasetId: $e');
       // Do not transition to error state if we already have data, just skip this tick
-      if (!state.hasValue && mounted) {
+      if (!state.hasValue && ref.mounted) {
         state = AsyncValue.error(e, StackTrace.current);
       }
     }
@@ -77,19 +156,15 @@ class LiveDatasetNotifier extends StateNotifier<AsyncValue<List<dynamic>>> with 
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState appState) {
-    if (appState == AppLifecycleState.resumed) {
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
       _silentFetch(); // Immediately fetch on resume
+      _startStreaming();
       _startPolling();
-    } else if (appState == AppLifecycleState.paused || appState == AppLifecycleState.inactive) {
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _stopStreaming();
       _stopPolling();
     }
-  }
-
-  @override
-  void dispose() {
-    _stopPolling();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
   }
 }

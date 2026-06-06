@@ -6,6 +6,8 @@ class SecureStorage {
   static const String _keyToken = 'jwt_token';
   static const String _keyRefreshToken = 'refresh_token';
   static const String _keyUserId = 'user_id';
+  static const String _keyName = 'user_name';
+  static const String _keyEmail = 'user_email';
 
   Future<void> saveToken(String token) async {
     await _storage.write(key: _keyToken, value: token);
@@ -27,6 +29,26 @@ class SecureStorage {
     await _storage.write(key: _keyUserId, value: userId);
   }
 
+  Future<String?> getUserId() async {
+    return await _storage.read(key: _keyUserId);
+  }
+
+  Future<void> saveName(String name) async {
+    await _storage.write(key: _keyName, value: name);
+  }
+
+  Future<String?> getName() async {
+    return await _storage.read(key: _keyName);
+  }
+
+  Future<void> saveEmail(String email) async {
+    await _storage.write(key: _keyEmail, value: email);
+  }
+
+  Future<String?> getEmail() async {
+    return await _storage.read(key: _keyEmail);
+  }
+
   Future<void> saveWorkspaceToken(String workspaceId, String token) async {
     await _storage.write(key: 'workspace_token_$workspaceId', value: token);
   }
@@ -37,6 +59,18 @@ class SecureStorage {
 
   Future<void> deleteWorkspaceToken(String workspaceId) async {
     await _storage.delete(key: 'workspace_token_$workspaceId');
+  }
+
+  Future<void> saveVoteBoxToken(String voteBoxId, String token) async {
+    await _storage.write(key: 'vote_box_token_$voteBoxId', value: token);
+  }
+
+  Future<String?> getVoteBoxToken(String voteBoxId) async {
+    return await _storage.read(key: 'vote_box_token_$voteBoxId');
+  }
+
+  Future<void> deleteVoteBoxToken(String voteBoxId) async {
+    await _storage.delete(key: 'vote_box_token_$voteBoxId');
   }
 
   Future<void> clearAll() async {

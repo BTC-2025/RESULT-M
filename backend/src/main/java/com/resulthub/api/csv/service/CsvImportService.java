@@ -54,6 +54,11 @@ public class CsvImportService {
 
     @Transactional
     public UploadResponse uploadCsv(UUID datasetId, MultipartFile file, User user) {
+        return uploadCsv(datasetId, file, null, user);
+    }
+
+    @Transactional
+    public UploadResponse uploadCsv(UUID datasetId, MultipartFile file, String recordKeyColumn, User user) {
         Dataset dataset = datasetRepository.findByIdAndNotDeleted(datasetId)
                 .orElseThrow(() -> new RuntimeException("Dataset not found"));
 
@@ -92,7 +97,7 @@ public class CsvImportService {
             
             // In a real system, we would publish an event here.
             // For now, we will execute it synchronously/asynchronously.
-            processCsvImport(importJob.getId(), tempFile);
+            processCsvImport(importJob.getId(), tempFile, recordKeyColumn);
 
             return UploadResponse.builder()
                     .importJobId(importJob.getId())
@@ -108,7 +113,7 @@ public class CsvImportService {
 
     @Async
     @Transactional
-    public void processCsvImport(UUID jobId, Path filePath) {
+    public void processCsvImport(UUID jobId, Path filePath, String recordKeyColumn) {
         ImportJob job = importJobRepository.findById(jobId).orElseThrow();
         job.setStatus(ImportStatus.PROCESSING);
         job.setStartedAt(LocalDateTime.now());
@@ -139,9 +144,12 @@ public class CsvImportService {
                         validationService.validateDataAgainstSchema(rowData, schema.getSchemaDefinition());
                     }
 
+                    String recordKey = resolveRecordKey(rowData, recordKeyColumn);
+
                     DatasetRecord record = DatasetRecord.builder()
                             .dataset(job.getDataset())
-                            .recordKey(UUID.randomUUID().toString()) // Can be derived from a specific column if configured
+                            .recordKey(recordKey)
+                            .recordTitle(resolveRecordTitle(rowData))
                             .data(rowData)
                             .build();
 
@@ -179,6 +187,34 @@ public class CsvImportService {
             job.setCompletedAt(LocalDateTime.now());
             importJobRepository.save(job);
         }
+    }
+
+    private String resolveRecordKey(Map<String, Object> rowData, String recordKeyColumn) {
+        if (recordKeyColumn != null && !recordKeyColumn.isBlank()) {
+            Object value = rowData.get(recordKeyColumn);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString();
+            }
+        }
+
+        for (String fallbackColumn : List.of("recordKey", "rollNumber", "id", "studentId")) {
+            Object value = rowData.get(fallbackColumn);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString();
+            }
+        }
+
+        return UUID.randomUUID().toString();
+    }
+
+    private String resolveRecordTitle(Map<String, Object> rowData) {
+        for (String titleColumn : List.of("name", "title", "studentName", "teamName")) {
+            Object value = rowData.get(titleColumn);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString();
+            }
+        }
+        return null;
     }
 
     private void validateEditorAccess(UUID workspaceId, UUID userId) {

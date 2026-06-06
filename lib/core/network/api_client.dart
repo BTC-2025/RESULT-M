@@ -7,6 +7,14 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(SecureStorage());
 });
 
+String _defaultBaseUrl() {
+  const configuredUrl = String.fromEnvironment('API_BASE_URL');
+  if (configuredUrl.isNotEmpty) return configuredUrl;
+  return Platform.isAndroid
+      ? 'http://10.164.132.123:8080/api/v1' // Laptop's Wi-Fi IP for Physical Device
+      : 'http://localhost:8080/api/v1';
+}
+
 class ApiClient {
   final Dio _dio;
   final SecureStorage _secureStorage;
@@ -14,46 +22,69 @@ class ApiClient {
   final List<Map<String, dynamic>> _failedRequestsQueue = [];
 
   ApiClient(this._secureStorage)
-      : _dio = Dio(BaseOptions(
-          // Use 10.0.2.2 for Android Emulator mapping to localhost, or physical IP.
-          baseUrl: Platform.isAndroid ? 'http://10.0.2.2:8080/api/v1' : 'http://localhost:8080/api/v1',
+    : _dio = Dio(
+        BaseOptions(
+          baseUrl: _defaultBaseUrl(),
           connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 20),
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
-        )) {
+        ),
+      ) {
     _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: _onRequest,
-        onError: _onError,
-      ),
+      InterceptorsWrapper(onRequest: _onRequest, onError: _onError),
     );
     // Add logging interceptor for debugging in dev mode
-    _dio.interceptors.add(LogInterceptor(
-      request: true,
-      requestHeader: true,
-      requestBody: true,
-      responseHeader: false,
-      responseBody: true,
-      error: true,
-    ));
+    _dio.interceptors.add(
+      LogInterceptor(
+        request: true,
+        requestHeader: true,
+        requestBody: true,
+        responseHeader: false,
+        responseBody: true,
+        error: true,
+      ),
+    );
   }
 
   Dio get client => _dio;
 
-  Future<void> _onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+  Future<void> _onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
     // Check if this is a workspace specific request
     final path = options.path;
-    final workspaceMatch = RegExp(r'workspaces/([a-zA-Z0-9-]+)').firstMatch(path);
-    
+    if (path.startsWith('/auth/')) {
+      return handler.next(options);
+    }
+
+    final workspaceMatch = RegExp(
+      r'workspaces/([a-zA-Z0-9-]+)',
+    ).firstMatch(path);
+
     if (workspaceMatch != null) {
       final workspaceId = workspaceMatch.group(1);
       if (workspaceId != null) {
-        final workspaceToken = await _secureStorage.getWorkspaceToken(workspaceId);
+        final workspaceToken = await _secureStorage.getWorkspaceToken(
+          workspaceId,
+        );
         if (workspaceToken != null && workspaceToken.isNotEmpty) {
           options.headers['Authorization'] = 'Workspace $workspaceToken';
+          return handler.next(options);
+        }
+      }
+    }
+
+    final voteBoxMatch = RegExp(r'votes/([a-zA-Z0-9-]+)').firstMatch(path);
+    if (voteBoxMatch != null) {
+      final voteBoxId = voteBoxMatch.group(1);
+      if (voteBoxId != null) {
+        final voteBoxToken = await _secureStorage.getVoteBoxToken(voteBoxId);
+        if (voteBoxToken != null && voteBoxToken.isNotEmpty) {
+          options.headers['Authorization'] = 'Workspace $voteBoxToken';
           return handler.next(options);
         }
       }
@@ -74,11 +105,20 @@ class ApiClient {
       final authHeader = e.requestOptions.headers['Authorization'] as String?;
       if (authHeader != null && authHeader.startsWith('Workspace ')) {
         final path = e.requestOptions.path;
-        final workspaceMatch = RegExp(r'workspaces/([a-zA-Z0-9-]+)').firstMatch(path);
+        final workspaceMatch = RegExp(
+          r'workspaces/([a-zA-Z0-9-]+)',
+        ).firstMatch(path);
         if (workspaceMatch != null) {
           final workspaceId = workspaceMatch.group(1);
           if (workspaceId != null) {
             await _secureStorage.deleteWorkspaceToken(workspaceId);
+          }
+        }
+        final voteBoxMatch = RegExp(r'votes/([a-zA-Z0-9-]+)').firstMatch(path);
+        if (voteBoxMatch != null) {
+          final voteBoxId = voteBoxMatch.group(1);
+          if (voteBoxId != null) {
+            await _secureStorage.deleteVoteBoxToken(voteBoxId);
           }
         }
         return handler.next(e);
@@ -106,7 +146,7 @@ class ApiClient {
         if (newToken != null && newToken.isNotEmpty) {
           // Refresh succeeded, update original request
           e.requestOptions.headers['Authorization'] = 'Bearer $newToken';
-          
+
           // Retry the original request
           final response = await _dio.fetch(e.requestOptions);
           handler.resolve(response);
@@ -131,13 +171,40 @@ class ApiClient {
   }
 
   Future<String?> _refreshToken() async {
-    // In a real OAuth2/JWT setup, call the /auth/refresh endpoint
-    // For this implementation, we simulate it or return null if not strictly implemented on backend yet.
-    // Example:
-    // final response = await _dio.post('/auth/refresh', data: {'token': await _secureStorage.getRefreshToken()});
-    // await _secureStorage.saveToken(response.data['accessToken']);
-    // return response.data['accessToken'];
-    return null;
+    final refreshToken = await _secureStorage.getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return null;
+    }
+
+    final response = await _dio.post(
+      '/auth/refresh',
+      data: {'refreshToken': refreshToken},
+      options: Options(headers: {'Authorization': null}),
+    );
+
+    final data = response.data;
+    if (data is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final accessToken = data['accessToken'] as String?;
+    if (accessToken == null || accessToken.isEmpty) {
+      return null;
+    }
+
+    await _secureStorage.saveToken(accessToken);
+
+    final rotatedRefreshToken = data['refreshToken'] as String?;
+    if (rotatedRefreshToken != null && rotatedRefreshToken.isNotEmpty) {
+      await _secureStorage.saveRefreshToken(rotatedRefreshToken);
+    }
+
+    final userId = data['userId']?.toString();
+    if (userId != null && userId.isNotEmpty) {
+      await _secureStorage.saveUserId(userId);
+    }
+
+    return accessToken;
   }
 
   void _retryQueuedRequests(String newToken) {
@@ -145,10 +212,16 @@ class ApiClient {
       final RequestOptions options = request['options'];
       final ErrorInterceptorHandler handler = request['handler'];
       options.headers['Authorization'] = 'Bearer $newToken';
-      _dio.fetch(options).then(
-        (res) => handler.resolve(res),
-        onError: (err) => handler.next(err is DioException ? err : DioException(requestOptions: options, error: err)),
-      );
+      _dio
+          .fetch(options)
+          .then(
+            (res) => handler.resolve(res),
+            onError: (err) => handler.next(
+              err is DioException
+                  ? err
+                  : DioException(requestOptions: options, error: err),
+            ),
+          );
     }
     _failedRequestsQueue.clear();
   }
@@ -167,7 +240,7 @@ class ApiClient {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        message = 'Connection timeout. Please check your internet connection.';
+        message = 'Backend is taking too long to respond. Check the API server and network.';
         break;
       case DioExceptionType.badResponse:
         final statusCode = error.response?.statusCode;

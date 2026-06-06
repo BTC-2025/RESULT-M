@@ -1,0 +1,21 @@
+spring:
+  cache:
+    type: redis
+    redis:
+      time-to-live: ${CACHE_TTL:PT5M}
+      cache-null-values: false
+      key-prefix: ${CACHE_KEY_PREFIX:resulthub:}
+      use-key-prefix: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+
+resulthub:
+  cache:
+    public-max-age: ${PUBLIC_CACHE_MAX_AGE:300}
+    public-stale-while-revalidate: ${PUBLIC_CACHE_STALE_WHILE_REVALIDATE:900}

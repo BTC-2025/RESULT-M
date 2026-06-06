@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/domain_model.dart';
+import 'embeddable_vote_box.dart';
 
 class RecordCardFactory extends StatelessWidget {
   final DomainType domainType;
@@ -13,27 +14,73 @@ class RecordCardFactory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget card;
     try {
       switch (domainType) {
         case DomainType.sport:
-          return _buildSportCard();
+          card = _buildSportCard();
+          break;
         case DomainType.finance:
-          return _buildFinanceCard();
+          card = _buildFinanceCard();
+          break;
         case DomainType.politics:
-          return _buildPoliticsCard();
+          card = _buildPoliticsCard();
+          break;
         case DomainType.law:
-          return _buildLawCard();
+          card = _buildLawCard();
+          break;
         case DomainType.entertainment:
-          return _buildEntertainmentCard();
+          card = _buildEntertainmentCard();
+          break;
         case DomainType.tech:
-          return _buildTechCard();
+          card = _buildTechCard();
+          break;
         default:
-          return _buildGenericCard();
+          card = _buildGenericCard();
       }
     } catch (e) {
       // Graceful fallback if anything goes wrong during specialized rendering
-      return _buildGenericCard();
+      card = _buildGenericCard();
     }
+
+    return _withEmbeddedVoteBoxes(card);
+  }
+
+  Widget _withEmbeddedVoteBoxes(Widget card) {
+    final voteBoxIds = _extractVoteBoxIds();
+    if (voteBoxIds.isEmpty) return card;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        card,
+        ...voteBoxIds.map(
+          (id) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: EmbeddableVoteBox(voteBoxId: id),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<String> _extractVoteBoxIds() {
+    final raw = record['voteBoxIds'] ?? record['voteBoxId'] ?? record['pollIds'] ?? record['pollId'];
+    if (raw == null) return const [];
+
+    if (raw is List) {
+      return raw
+          .map((value) => value.toString().trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+    }
+
+    return raw
+        .toString()
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
   }
 
   // ── SPORT ──

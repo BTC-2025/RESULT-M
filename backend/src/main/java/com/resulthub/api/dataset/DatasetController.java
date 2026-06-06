@@ -38,16 +38,20 @@ public class DatasetController {
     public ResponseEntity<Page<DatasetResponse>> getDatasetsByWorkspace(
             @PathVariable UUID workspaceId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @AuthenticationPrincipal User user,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
-        return ResponseEntity.ok(datasetService.getDatasetsByWorkspace(workspaceId, PageRequest.of(page, size)));
+        return ResponseEntity.ok(datasetService.getDatasetsByWorkspace(workspaceId, PageRequest.of(page, size), user, authHeader));
     }
 
     @GetMapping("/datasets/{id}")
     public ResponseEntity<DatasetResponse> getDataset(
-            @PathVariable UUID id
+            @PathVariable UUID id,
+            @AuthenticationPrincipal User user,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
-        return ResponseEntity.ok(datasetService.getDataset(id));
+        return ResponseEntity.ok(datasetService.getDataset(id, user, authHeader));
     }
 
     @PutMapping("/datasets/{id}")

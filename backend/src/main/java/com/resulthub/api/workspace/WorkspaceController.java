@@ -1,5 +1,6 @@
 package com.resulthub.api.workspace;
 
+import com.resulthub.api.dataset.enums.DomainType;
 import com.resulthub.api.user.User;
 import com.resulthub.api.workspace.dto.CreateWorkspaceRequest;
 import com.resulthub.api.workspace.dto.UpdateWorkspaceRequest;
@@ -66,10 +67,11 @@ public class WorkspaceController {
 
     @GetMapping("/public")
     public ResponseEntity<Page<WorkspaceResponse>> getPublicWorkspaces(
+            @RequestParam(required = false) DomainType domainType,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ResponseEntity.ok(workspaceService.getPublicWorkspaces(PageRequest.of(page, size)));
+        return ResponseEntity.ok(workspaceService.getPublicWorkspaces(domainType, PageRequest.of(page, size)));
     }
 
     @PutMapping("/{id}")

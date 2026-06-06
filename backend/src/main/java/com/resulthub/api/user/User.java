@@ -42,6 +42,12 @@ public class User implements UserDetails {
     private LocalDateTime deletedAt;
     private UUID deletedBy;
 
+    // Added for extended profile functionality
+    private String phoneNumber;
+    private String organizationType;
+    private String website;
+    private String city;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

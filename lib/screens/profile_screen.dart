@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import '../services/auth_service.dart';
+import '../core/storage/secure_storage.dart';
+import '../core/theme/app_theme.dart';
+import '../providers/theme_provider.dart';
+import 'package:go_router/go_router.dart';
 import 'login_screen.dart';
 import 'bookmarks_screen.dart';
 import 'profile_pages/recently_viewed_screen.dart';
@@ -10,41 +16,72 @@ import 'profile_pages/help_center_screen.dart';
 import 'profile_pages/legal_screen.dart';
 import 'profile_pages/personal_details_screen.dart';
 import 'profile_pages/my_workspaces_screen.dart';
+import '../providers/auth_provider.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  User? _firebaseUser;
+  StreamSubscription<User?>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    // Re-check auth status when profile screen is first loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(authProvider.notifier).checkAuthStatus();
+    });
+
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (mounted) {
+        setState(() {
+          _firebaseUser = user;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  bool _isLoggedIn(AuthState authState) => authState.isLoggedIn || _firebaseUser != null;
+
+  @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final isLoggedIn = _isLoggedIn(authState);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
+      backgroundColor: context.colors.bg,
       appBar: AppBar(
-        title: const Text('PROFILE', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+        title: Text('PROFILE', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2, color: context.colors.ink)),
         centerTitle: false,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF0F172A),
+        backgroundColor: context.colors.bg,
+        foregroundColor: context.colors.ink,
         elevation: 0,
       ),
-      body: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          final user = snapshot.data;
-          final isLoggedIn = user != null;
-
-          return SingleChildScrollView(
+      body: SingleChildScrollView(
             child: Column(
               children: [
                 // Header (Conditional based on Auth state)
-                isLoggedIn ? _buildUserHeader(user) : _buildGuestHeader(context),
+                isLoggedIn ? _buildUserHeader(context, authState) : _buildGuestHeader(context),
                 
                 Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('ACCOUNT', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                      Text('ACCOUNT', style: TextStyle(color: context.colors.inkFaint, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                       const SizedBox(height: 12),
-                      _buildMenuGroup([
+                      _buildMenuGroup(context, [
                         if (isLoggedIn)
                           _buildMenuItem(context, Icons.person_outline, 'Personal Details', const PersonalDetailsScreen()),
                         if (isLoggedIn)
@@ -54,17 +91,18 @@ class ProfileScreen extends StatelessWidget {
                       ]),
                       
                       const SizedBox(height: 32),
-                      const Text('PREFERENCES', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                      Text('PREFERENCES', style: TextStyle(color: context.colors.inkFaint, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                       const SizedBox(height: 12),
-                      _buildMenuGroup([
+                      _buildMenuGroup(context, [
+                        _buildThemeToggle(context, ref),
                         _buildMenuItem(context, Icons.notifications_none, 'Push Notifications', const NotificationsSettingsScreen()),
                         _buildMenuItem(context, Icons.language, 'Language (English)', const LanguageScreen()),
                       ]),
 
                       const SizedBox(height: 32),
-                      const Text('SUPPORT & LEGAL', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                      Text('SUPPORT & LEGAL', style: TextStyle(color: context.colors.inkFaint, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                       const SizedBox(height: 12),
-                      _buildMenuGroup([
+                      _buildMenuGroup(context, [
                         _buildMenuItem(context, Icons.help_outline, 'Help Center', const HelpCenterScreen()),
                         _buildMenuItem(context, Icons.privacy_tip_outlined, 'Privacy Policy', const LegalScreen()),
                         _buildActionItem(context, Icons.info_outline, 'About ResultHub', () {
@@ -72,8 +110,8 @@ class ProfileScreen extends StatelessWidget {
                             context: context,
                             applicationName: 'ResultHub',
                             applicationVersion: '1.0.0',
-                            applicationIcon: const Icon(Icons.emoji_events, size: 64, color: Color(0xFFFF5722)),
-                            children: [const Text('The ultimate platform for exam and academic results.')]
+                            applicationIcon: Icon(Icons.emoji_events, size: 64, color: context.colors.orange),
+                            children: [Text('The ultimate platform for exam and academic results.', style: TextStyle(color: context.colors.ink))]
                           );
                         }),
                       ]),
@@ -85,20 +123,27 @@ class ProfileScreen extends StatelessWidget {
                           height: 56,
                           child: OutlinedButton(
                             onPressed: () async {
+                              // Logout from both Backend and Firebase
                               await AuthService().logout();
+                              await FirebaseAuth.instance.signOut();
+                              ref.read(authProvider.notifier).logout();
+                              if (context.mounted) {
+                                // Full state reset via routing to Splash
+                                context.go('/splash');
+                              }
                             },
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.red, width: 2),
+                              side: BorderSide(color: context.colors.liveRed, width: 2),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            child: const Text('LOGOUT', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                            child: Text('LOGOUT', style: TextStyle(color: context.colors.liveRed, fontWeight: FontWeight.w900, letterSpacing: 1)),
                           ),
                         ),
                       ],
 
                       const SizedBox(height: 32),
-                      const Center(
-                        child: Text('Version 1.0.0', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                      Center(
+                        child: Text('Version 1.0.0', style: TextStyle(color: context.colors.inkFaint, fontWeight: FontWeight.bold)),
                       ),
                       const SizedBox(height: 48),
                     ],
@@ -106,22 +151,54 @@ class ProfileScreen extends StatelessWidget {
                 )
               ],
             ),
+            ),
           );
-        }
+  }
+
+  Widget _buildThemeToggle(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeProvider);
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Row(
+        children: [
+          Icon(Icons.dark_mode_outlined, color: context.colors.ink, size: 22),
+          const SizedBox(width: 16),
+          Expanded(child: Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: context.colors.ink))),
+          DropdownButton<ThemeMode>(
+            value: themeMode,
+            underline: const SizedBox(),
+            icon: Icon(Icons.keyboard_arrow_down, color: context.colors.inkMuted),
+            dropdownColor: context.colors.surfaceAlt,
+            style: TextStyle(color: context.colors.ink, fontWeight: FontWeight.w700, fontSize: 13),
+            items: const [
+              DropdownMenuItem(value: ThemeMode.system, child: Text('System')),
+              DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
+              DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
+            ],
+            onChanged: (mode) {
+              if (mode != null) ref.read(themeProvider.notifier).setTheme(mode);
+            },
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildGuestHeader(BuildContext context) {
     return Container(
-      color: Colors.white,
+      color: context.colors.bg,
       padding: const EdgeInsets.all(24),
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
+          gradient: LinearGradient(
+            colors: [context.colors.orange, context.colors.orangeGlow],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: const Color(0xFF0F172A).withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, 10))],
+          boxShadow: [BoxShadow(color: context.colors.orange.withValues(alpha: 0.2), blurRadius: 20, offset: Offset(0, 10))],
         ),
         child: Column(
           children: [
@@ -136,7 +213,7 @@ class ProfileScreen extends StatelessWidget {
             Text(
               'Save your results, get notified instantly, and sync across devices.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13, fontWeight: FontWeight.w500),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 24),
             SizedBox(
@@ -147,8 +224,8 @@ class ProfileScreen extends StatelessWidget {
                   Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF5722),
-                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.white,
+                  foregroundColor: context.colors.orange,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
                 ),
@@ -160,34 +237,59 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
+  Widget _buildUserHeader(BuildContext context, AuthState authState) {
+    String displayName = authState.name ?? 'Member';
+    String displayEmail = authState.email ?? 'Authenticated Account';
+    String? photoUrl;
 
-  Widget _buildUserHeader(User user) {
+    if (_firebaseUser != null) {
+      displayName = _firebaseUser!.displayName ?? displayName;
+      displayEmail = _firebaseUser!.email ?? _firebaseUser!.phoneNumber ?? displayEmail;
+      photoUrl = _firebaseUser!.photoURL;
+    }
+
+    String initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'M';
+
     return Container(
-      color: Colors.white,
+      color: context.colors.bg,
       padding: const EdgeInsets.all(24),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 36,
-            backgroundColor: const Color(0xFFF8F9FA),
-            backgroundImage: user.photoURL != null ? NetworkImage(user.photoURL!) : null,
-            child: user.photoURL == null ? const Icon(Icons.person, size: 36, color: Colors.grey) : null,
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: photoUrl == null ? LinearGradient(
+                colors: [context.colors.orange, context.colors.orangeGlow],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ) : null,
+              image: photoUrl != null ? DecorationImage(image: NetworkImage(photoUrl), fit: BoxFit.cover) : null,
+              boxShadow: [
+                BoxShadow(color: context.colors.orange.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8)),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: photoUrl == null 
+                ? Text(initial, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white))
+                : null,
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  user.displayName ?? 'Student', 
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+                  displayName, 
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: context.colors.ink, letterSpacing: -0.5),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  user.email ?? user.phoneNumber ?? 'No Contact Details', 
-                  style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w600, fontSize: 14),
+                  displayEmail, 
+                  style: TextStyle(color: context.colors.inkMuted, fontWeight: FontWeight.w600, fontSize: 14),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -199,12 +301,12 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuGroup(List<Widget> items) {
+  Widget _buildMenuGroup(BuildContext context, List<Widget> items) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: context.colors.border),
       ),
       child: Column(
         children: items.asMap().entries.map((entry) {
@@ -214,7 +316,7 @@ class ProfileScreen extends StatelessWidget {
             children: [
               item,
               if (idx < items.length - 1)
-                Divider(height: 1, indent: 56, color: Colors.grey.shade100),
+                Divider(height: 1, indent: 56, color: context.colors.border),
             ],
           );
         }).toList(),
@@ -231,10 +333,10 @@ class ProfileScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Row(
           children: [
-            Icon(icon, color: const Color(0xFF0F172A), size: 22),
+            Icon(icon, color: context.colors.ink, size: 22),
             const SizedBox(width: 16),
-            Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)))),
-            const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+            Expanded(child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: context.colors.ink))),
+            Icon(Icons.arrow_forward_ios, size: 14, color: context.colors.inkMuted),
           ],
         ),
       ),
@@ -248,10 +350,10 @@ class ProfileScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Row(
           children: [
-            Icon(icon, color: const Color(0xFF0F172A), size: 22),
+            Icon(icon, color: context.colors.ink, size: 22),
             const SizedBox(width: 16),
-            Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A)))),
-            const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+            Expanded(child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: context.colors.ink))),
+            Icon(Icons.arrow_forward_ios, size: 14, color: context.colors.inkMuted),
           ],
         ),
       ),

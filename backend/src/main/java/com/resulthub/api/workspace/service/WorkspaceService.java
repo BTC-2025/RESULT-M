@@ -1,5 +1,7 @@
 package com.resulthub.api.workspace.service;
 
+import com.resulthub.api.dataset.enums.DatasetStatus;
+import com.resulthub.api.dataset.enums.DomainType;
 import com.resulthub.api.user.User;
 import com.resulthub.api.workspace.dto.CreateWorkspaceRequest;
 import com.resulthub.api.workspace.dto.UpdateWorkspaceRequest;
@@ -12,6 +14,8 @@ import com.resulthub.api.workspace.repository.WorkspaceMemberRepository;
 import com.resulthub.api.workspace.repository.WorkspaceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -30,6 +34,7 @@ public class WorkspaceService {
     private final com.resulthub.api.security.WorkspaceTokenService workspaceTokenService;
 
     @Transactional
+    @CacheEvict(value = "publicWorkspaces", allEntries = true)
     public WorkspaceResponse createWorkspace(CreateWorkspaceRequest request, User user) {
         Workspace workspace = Workspace.builder()
                 .name(request.getName())
@@ -103,8 +108,22 @@ public class WorkspaceService {
         return workspaceTokenService.generateToken(workspace.getId().toString());
     }
 
-    public Page<WorkspaceResponse> getPublicWorkspaces(Pageable pageable) {
-        return workspaceRepository.findByVisibilityAndNotDeleted(VisibilityMode.PUBLIC, pageable)
+    @Cacheable(
+            value = "publicWorkspaces",
+            key = "(#domainType == null ? 'ALL' : #domainType.name()) + ':' + #pageable.pageNumber + ':' + #pageable.pageSize",
+            sync = true
+    )
+    public Page<WorkspaceResponse> getPublicWorkspaces(DomainType domainType, Pageable pageable) {
+        Page<Workspace> workspaces = domainType == null
+                ? workspaceRepository.findByVisibilityAndNotDeleted(VisibilityMode.PUBLIC, pageable)
+                : workspaceRepository.findByVisibilityAndPublishedDomainAndNotDeleted(
+                        VisibilityMode.PUBLIC,
+                        DatasetStatus.PUBLISHED,
+                        domainType,
+                        pageable
+                );
+
+        return workspaces
                 .map(this::mapToResponse);
     }
 
@@ -114,6 +133,7 @@ public class WorkspaceService {
     }
 
     @Transactional
+    @CacheEvict(value = "publicWorkspaces", allEntries = true)
     public WorkspaceResponse updateWorkspace(UUID id, UpdateWorkspaceRequest request, User user) {
         Workspace workspace = validateOwner(id, user);
 
@@ -128,6 +148,7 @@ public class WorkspaceService {
     }
 
     @Transactional
+    @CacheEvict(value = "publicWorkspaces", allEntries = true)
     public void deleteWorkspace(UUID id, User user) {
         Workspace workspace = validateOwner(id, user);
         workspace.setDeletedAt(LocalDateTime.now());

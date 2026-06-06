@@ -6,6 +6,9 @@ import com.resulthub.api.search.entity.SearchAnalytics;
 import com.resulthub.api.search.repository.SearchAnalyticsRepository;
 import com.resulthub.api.search.repository.SearchRepository;
 import com.resulthub.api.user.User;
+import com.resulthub.api.workspace.entity.Workspace;
+import com.resulthub.api.workspace.repository.WorkspaceRepository;
+import com.resulthub.api.workspace.service.WorkspaceAccessService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -21,8 +24,17 @@ public class SearchService {
 
     private final SearchRepository searchRepository;
     private final SearchAnalyticsRepository analyticsRepository;
+    private final WorkspaceRepository workspaceRepository;
+    private final WorkspaceAccessService workspaceAccessService;
 
-    public PaginatedSearchResponse globalSearch(String query, UUID targetWorkspaceId, int page, int size, User user) {
+    public PaginatedSearchResponse globalSearch(
+            String query,
+            UUID targetWorkspaceId,
+            int page,
+            int size,
+            User user,
+            String authHeader
+    ) {
         if (query == null || query.trim().isEmpty()) {
             return PaginatedSearchResponse.builder()
                     .results(List.of())
@@ -35,8 +47,22 @@ public class SearchService {
 
         UUID userId = user != null ? user.getId() : null;
         int offset = page * size;
+        boolean canViewTargetWorkspace = false;
+
+        if (targetWorkspaceId != null) {
+            Workspace workspace = workspaceRepository.findByIdAndNotDeleted(targetWorkspaceId)
+                    .orElseThrow(() -> new RuntimeException("Workspace not found"));
+            workspaceAccessService.validateCanView(workspace, user, authHeader);
+            canViewTargetWorkspace = true;
+        }
         
-        List<SearchResult> results = searchRepository.globalSearch(query, targetWorkspaceId, userId, offset, size);
+        List<SearchResult> results = searchRepository.globalSearch(
+                query,
+                targetWorkspaceId,
+                canViewTargetWorkspace,
+                offset,
+                size
+        );
 
         // Track analytics asynchronously
         trackSearchAsync(query, results.size(), userId, null);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../services/auth_service.dart';
+import 'otp_verification_screen.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -18,7 +19,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  Future<void> _resetPassword() async {
+  Future<void> _requestOtp() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter your email address')));
@@ -26,26 +27,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
 
     setState(() => _isLoading = true);
-    try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-      if (!mounted) return;
+    final error = await AuthService().forgotPassword(email);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (error == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Password reset email sent! Check your inbox.'),
+        content: Text('OTP sent! Please check the console output.'),
         backgroundColor: Colors.green,
       ));
-      Navigator.pop(context);
-    } on FirebaseAuthException catch (e) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => OtpVerificationScreen(email: email)),
+      );
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(e.message ?? 'An error occurred'),
+        content: Text(error),
         backgroundColor: Colors.red,
       ));
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(e.toString()),
-        backgroundColor: Colors.red,
-      ));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -74,7 +73,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Enter your registered email address and we will send you a link to reset your password.',
+                'Enter your registered email address and we will send you a 6-digit OTP.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
@@ -96,7 +95,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               SizedBox(
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _resetPassword,
+                  onPressed: _isLoading ? null : _requestOtp,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0F172A),
                     foregroundColor: Colors.white,
@@ -105,7 +104,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                   child: _isLoading 
                       ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('SEND RESET LINK', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                      : const Text('SEND OTP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1)),
                 ),
               ),
             ],

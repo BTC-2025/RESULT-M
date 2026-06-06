@@ -27,8 +27,8 @@ public abstract class BaseContainerTest {
         registry.add("spring.flyway.url", postgreSQLContainer::getJdbcUrl);
         registry.add("spring.flyway.user", postgreSQLContainer::getUsername);
         registry.add("spring.flyway.password", postgreSQLContainer::getPassword);
+        registry.add("app.upload.dir", () -> "target/test-uploads/complaints");
         // Disable unnecessary logging for tests
         registry.add("logging.level.org.hibernate.SQL", () -> "DEBUG");
     }
 }
-

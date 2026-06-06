@@ -1,22 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
-import '../../services/api_service.dart';
-import 'guest/local_workspace_screen.dart';
-import 'guest/password_unlock_screen.dart';
+import 'package:go_router/go_router.dart';
+import 'local_workspace_screen.dart';
+import 'password_unlock_screen.dart';
 import '../../core/network/api_client.dart';
 
 class WorkspaceResolverScreen extends ConsumerStatefulWidget {
   final String slug;
   final String? initialCode;
 
-  const WorkspaceResolverScreen({super.key, required this.slug, this.initialCode});
+  const WorkspaceResolverScreen({
+    super.key,
+    required this.slug,
+    this.initialCode,
+  });
 
   @override
-  ConsumerState<WorkspaceResolverScreen> createState() => _WorkspaceResolverScreenState();
+  ConsumerState<WorkspaceResolverScreen> createState() =>
+      _WorkspaceResolverScreenState();
 }
 
-class _WorkspaceResolverScreenState extends ConsumerState<WorkspaceResolverScreen> {
+class _WorkspaceResolverScreenState
+    extends ConsumerState<WorkspaceResolverScreen> {
   bool _isLoading = true;
   String? _error;
 
@@ -30,7 +36,7 @@ class _WorkspaceResolverScreenState extends ConsumerState<WorkspaceResolverScree
     try {
       final dio = ref.read(apiClientProvider).client;
       final response = await dio.get('/workspaces/slug/${widget.slug}');
-      
+
       if (response.statusCode == 200) {
         final data = response.data;
         final visibility = data['visibility'];
@@ -43,7 +49,10 @@ class _WorkspaceResolverScreenState extends ConsumerState<WorkspaceResolverScree
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => LocalWorkspaceScreen(workspaceId: workspaceId, workspaceName: workspaceName),
+              builder: (context) => LocalWorkspaceScreen(
+                workspaceId: workspaceId,
+                workspaceName: workspaceName,
+              ),
             ),
           );
         } else if (visibility == 'PASSWORD_PROTECTED') {
@@ -89,14 +98,21 @@ class _WorkspaceResolverScreenState extends ConsumerState<WorkspaceResolverScree
             : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.error_outline, color: Colors.redAccent, size: 60),
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.redAccent,
+                    size: 60,
+                  ),
                   const SizedBox(height: 16),
-                  Text(_error ?? 'Unknown Error', style: const TextStyle(color: Colors.white, fontSize: 18)),
+                  Text(
+                    _error ?? 'Unknown Error',
+                    style: const TextStyle(color: Colors.white, fontSize: 18),
+                  ),
                   const SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+                    onPressed: () => context.go('/'),
                     child: const Text('Go Home'),
-                  )
+                  ),
                 ],
               ),
       ),

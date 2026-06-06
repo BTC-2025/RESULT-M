@@ -11,6 +11,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.UUID;
 
@@ -34,16 +35,29 @@ public class DatasetRecordController {
     public ResponseEntity<Page<RecordResponse>> getRecords(
             @PathVariable UUID datasetId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(defaultValue = "10") int size,
+            @AuthenticationPrincipal User user,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
-        return ResponseEntity.ok(recordService.getRecords(datasetId, PageRequest.of(page, size)));
+        return ResponseEntity.ok(recordService.getRecords(datasetId, PageRequest.of(page, size), user, authHeader));
+    }
+
+    @GetMapping("/datasets/{datasetId}/records/stream")
+    public SseEmitter streamRecords(
+            @PathVariable UUID datasetId,
+            @AuthenticationPrincipal User user,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
+    ) {
+        return recordService.streamRecords(datasetId, user, authHeader);
     }
 
     @GetMapping("/records/{recordId}")
     public ResponseEntity<RecordResponse> getRecord(
-            @PathVariable UUID recordId
+            @PathVariable UUID recordId,
+            @AuthenticationPrincipal User user,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
-        return ResponseEntity.ok(recordService.getRecord(recordId));
+        return ResponseEntity.ok(recordService.getRecord(recordId, user, authHeader));
     }
 
     @PutMapping("/records/{recordId}")

@@ -21,8 +21,9 @@ public class SearchController {
             @RequestParam(required = false) java.util.UUID workspaceId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @AuthenticationPrincipal User user
     ) {
-        return ResponseEntity.ok(searchService.globalSearch(q, workspaceId, page, size, user));
+        return ResponseEntity.ok(searchService.globalSearch(q, workspaceId, page, size, user, authHeader));
     }
 }

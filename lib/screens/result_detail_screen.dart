@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
+import '../widgets/result_cards/domain_cards.dart';
 
 class ResultDetailScreen extends StatefulWidget {
   final String domainName;
@@ -31,6 +32,55 @@ class _ResultDetailScreenState extends State<ResultDetailScreen> {
       if (word.isEmpty) return word;
       return word[0].toUpperCase() + word.substring(1).toLowerCase();
     }).join(' ');
+  }
+
+  Widget _buildDomainCard() {
+    final domain = widget.domainName.toUpperCase();
+    final name = widget.datasetName.toUpperCase();
+    
+    if (domain.contains('ACADEMIC') || domain.contains('EDUCATION') || domain.contains('SCHOOL')) {
+      return AcademicResultCard(data: widget.recordData);
+    } else if (domain.contains('POLITICS') || domain.contains('ELECTION')) {
+      return ElectionResultCard(data: widget.recordData);
+    } else if (domain.contains('SPORT') || domain.contains('GAME')) {
+      return SportsResultCard(data: widget.recordData);
+    } else if (domain.contains('FINANCE') || domain.contains('MARKET') || domain.contains('ECONOM')) {
+      return FinanceResultCard(data: widget.recordData);
+    } else if (domain.contains('ENTERTAINMENT') || domain.contains('MEDIA') || domain.contains('MOVIE')) {
+      return EntertainmentResultCard(data: widget.recordData);
+    } else if (domain.contains('TECH') || domain.contains('INNOVATION') || domain.contains('SOFTWARE')) {
+      return TechResultCard(data: widget.recordData);
+    } else if (domain.contains('LAW') || domain.contains('GOVERNMENT') || domain.contains('JUDIC')) {
+      return LawResultCard(data: widget.recordData);
+    } else {
+      // Fallback
+      return Column(
+        children: widget.recordData.entries.map((entry) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    _formatKey(entry.key),
+                    style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    entry.value.toString(),
+                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      );
+    }
   }
 
   @override
@@ -83,31 +133,10 @@ class _ResultDetailScreenState extends State<ResultDetailScreen> {
                     
                     const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(thickness: 2)),
 
-                    // Dynamic Data Grid
-                    ...widget.recordData.entries.map((entry) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                _formatKey(entry.key),
-                                style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                entry.value.toString(),
-                                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w800),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
+                    const SizedBox(height: 16),
+                    _buildDomainCard(),
+                    
+                    const SizedBox(height: 24),
                     
                     const SizedBox(height: 24),
 

@@ -193,9 +193,10 @@ class _BookmarksScreenState extends State<BookmarksScreen> {
                     );
                     Navigator.push(context, MaterialPageRoute(
                       builder: (context) => ResultDetailScreen(
-                        domain: targetDomain, 
-                        credentials: {'Roll Number': item['roll']},
-                        examName: item['domain'],
+                        domainName: targetDomain.name,
+                        icon: targetDomain.icon,
+                        recordData: {'Roll Number': item['roll'], 'Status': item['status'], 'Name': item['name']},
+                        datasetName: item['domain'],
                       )
                     ));
                   },

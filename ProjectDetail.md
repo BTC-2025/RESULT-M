@@ -1,264 +1,512 @@
-# ResultHub – Complete Architecture & Technical Specification
+# ResultHub – Complete Architecture & Technical Specification (v1.1)
 
-This document serves as the complete technical, product, and architectural specification for the ResultHub full-stack platform. It details the Flutter frontend, the Spring Boot backend, the generic PostgreSQL JSONB database architecture, security strategies, dynamic rendering policies, and the complete file-by-file module mapping.
+This document is the authoritative, up-to-date technical, product, and architectural specification for the ResultHub full-stack platform. It details the Flutter frontend, the Spring Boot backend, the generic PostgreSQL JSONB database architecture, security strategy, dynamic rendering policy, state management, and the complete file-by-file module mapping as of **June 2026**.
 
 ---
 
 ## 1. System Architecture Overview
 
-ResultHub is a highly scalable, multi-tenant, multi-domain data publishing platform. Unlike traditional applications that use rigid schemas for different data types (e.g., a `cricket_scores` table vs. an `exam_results` table), ResultHub relies on a **Generic JSONB Publishing Engine** supporting multiple visibility modes and role-based access control.
+ResultHub is a highly scalable, multi-tenant, multi-domain data publishing platform with three distinct pillars:
 
-### Technical Stack:
-*   **Frontend:** Flutter SDK 3.44.0 (Material 3, Google Fonts Inter text theme) with Riverpod (State Management) and Dio (HTTP client with caching, interceptors, and error handlers).
-*   **Backend:** Spring Boot 3.5 (Java 21) running on a native JVM.
-*   **Database:** PostgreSQL 16+ utilizing GIN-indexed `JSONB` columns, declarative month-based partitioning for analytics logging, and native Full-Text Search.
-*   **Security:** Stateless JWT Authentication, Google OAuth2, CORS configuration, and Bucket4j IP-based rate limiting interceptor.
-*   **Database Migrations:** Flyway Migrations (Versions `V1` to `V6`).
-*   **Testing:** JUnit 5 integration tests powered by Dockerized PostgreSQL 16 Testcontainers utilizing a Singleton Container Pattern.
+| Pillar | Description |
+|---|---|
+| **A – Results Space** | Live score & exam results publishing via generic JSONB datasets |
+| **B – Complaint Box** | Reddit-style public complaint feed with media uploads, voting, comments, and admin moderation |
+| **C – Voting Hub** | Public/Private/Password-protected polls with real-time results, fingerprint-based anti-spam, and embeddable widgets |
+
+### Technical Stack
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | Flutter SDK 3.44.0, Material 3, Google Fonts (Inter), Riverpod 3.x (Notifier / AsyncNotifier), Dio 5.9, go_router 16 (StatefulShellRoute) |
+| **Backend** | Spring Boot 3.5, Java 21, Maven 3.9 |
+| **Database** | PostgreSQL 16+ — GIN-indexed JSONB, declarative partitioning, Full-Text Search, optimistic locking (`@Version`) |
+| **Security** | Stateless JWT (1-day access / 7-day refresh), Google OAuth2, Bucket4j IP rate limiting, Workspace token filter |
+| **Async Reliability** | Transactional Outbox Pattern (`write_outbox_events`) for guaranteed event delivery |
+| **Migrations** | Flyway (V1 → V10) |
+| **Testing** | JUnit 5 + Testcontainers (PostgreSQL 16 Singleton pattern) |
+| **PDF Import** | Apache PDFBox multipart upload pipeline |
+| **Media Storage** | Local filesystem via `ComplaintMediaService` (configurable path) |
 
 ---
 
 ## 2. Complete File-by-File Module Directory
 
-The physical codebase consists of two distinct subsystems: the Java REST API backend and the Dart/Flutter client frontend.
-
 ### 2.1 Backend Modules (`backend/src/main/java/com/resulthub/api/`)
 
-#### 📂 Package: `com.resulthub.api`
-*   [ResultHubApplication.java](file:///backend/src/main/java/com/resulthub/api/ResultHubApplication.java): The Spring Boot bootstrap class that launches the application server.
+#### 📂 Root
+- **ResultHubApplication.java** — Spring Boot bootstrap entry point.
 
-#### 📂 Package: `com.resulthub.api.analytics`
-*   [AnalyticsController.java](file:///backend/src/main/java/com/resulthub/api/analytics/AnalyticsController.java): REST controller exposing analytical and telemetry data aggregation endpoints for global dashboard metrics and workspace-specific metrics.
-*   [AnalyticsEvent.java](file:///backend/src/main/java/com/resulthub/api/analytics/entity/AnalyticsEvent.java): Entity mapping the partitioned `analytics_events` table. Uses `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` for the custom event type mapping, and `@JdbcTypeCode(SqlTypes.JSON)` for the metadata column.
-*   [EventType.java](file:///backend/src/main/java/com/resulthub/api/analytics/enums/EventType.java): Enumeration defining analytics events (`DATASET_VIEW`, `SEARCH`, `WORKSPACE_VIEW`, etc.).
-*   [ChartDataPoint.java](file:///backend/src/main/java/com/resulthub/api/analytics/dto/ChartDataPoint.java): DTO holding a single time-series charting data point (label, value).
-*   [GlobalAnalyticsResponse.java](file:///backend/src/main/java/com/resulthub/api/analytics/dto/GlobalAnalyticsResponse.java): DTO carrying global analytics metrics including total views, active workspaces, and aggregated trend lines.
-*   [WorkspaceAnalyticsResponse.java](file:///backend/src/main/java/com/resulthub/api/analytics/dto/WorkspaceAnalyticsResponse.java): DTO returning metrics specific to a single workspace (e.g. dataset popularity, daily visits).
-*   [AnalyticsEventRepository.java](file:///backend/src/main/java/com/resulthub/api/analytics/repository/AnalyticsEventRepository.java): Interface for CRUD database operations and customized aggregation native SQL queries.
-*   [AnalyticsTrackingService.java](file:///backend/src/main/java/com/resulthub/api/analytics/service/AnalyticsTrackingService.java): Service processing asynchronous telemetry events via `@Async` annotation.
-*   [WorkspaceAnalyticsService.java](file:///backend/src/main/java/com/resulthub/api/analytics/service/WorkspaceAnalyticsService.java): Business logic service performing aggregation queries mapped to chart data structures.
+---
 
-#### 📂 Package: `com.resulthub.api.auth`
-*   [AuthController.java](file:///backend/src/main/java/com/resulthub/api/auth/AuthController.java): REST endpoints for client onboarding, registration, login token generation, and refresh token rotation.
-*   [AuthService.java](file:///backend/src/main/java/com/resulthub/api/auth/AuthService.java): Core service that handles password registration using BCrypt hashing, JWT generation, and User validation.
-*   [AuthRequest.java](file:///backend/src/main/java/com/resulthub/api/auth/dto/AuthRequest.java): Request payload DTO for user login (email, password).
-*   [AuthResponse.java](file:///backend/src/main/java/com/resulthub/api/auth/dto/AuthResponse.java): Response payload DTO returning JWT credentials (accessToken, refreshToken, and basic user metadata).
-*   [RegisterRequest.java](file:///backend/src/main/java/com/resulthub/api/auth/dto/RegisterRequest.java): Payload validation class for user registrations (name, email, password).
+#### 📂 `com.resulthub.api.analytics`
+- **AnalyticsController.java** — REST endpoints for global and workspace-specific telemetry aggregation.
+- **AnalyticsEvent.java** *(entity)* — Maps the month-partitioned `analytics_events` table; uses `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` and `@JdbcTypeCode(SqlTypes.JSON)`.
+- **EventType.java** *(enum)* — `DATASET_VIEW`, `SEARCH`, `WORKSPACE_VIEW`, etc.
+- **ChartDataPoint.java** *(dto)* — Single time-series chart datum (label, value).
+- **GlobalAnalyticsResponse.java** *(dto)* — Platform-wide aggregated metrics.
+- **WorkspaceAnalyticsResponse.java** *(dto)* — Per-workspace visit and popularity metrics.
+- **AnalyticsEventRepository.java** — CRUD + native aggregation SQL queries.
+- **AnalyticsTrackingService.java** — Asynchronous `@Async` event ingestion.
+- **WorkspaceAnalyticsService.java** — Business logic for chart aggregation.
 
-#### 📂 Package: `com.resulthub.api.common.exception`
-*   [ErrorResponse.java](file:///backend/src/main/java/com/resulthub/api/common/exception/ErrorResponse.java): Standardized error JSON response model (timestamp, status code, error, message, request path) mapping all API errors.
-*   [GlobalExceptionHandler.java](file:///backend/src/main/java/com/resulthub/api/common/exception/GlobalExceptionHandler.java): Production-grade centralized `@ControllerAdvice` handling all standard exceptions without leaking JVM stack traces or SQL logs to clients.
-*   [RateLimitExceededException.java](file:///backend/src/main/java/com/resulthub/api/common/exception/RateLimitExceededException.java): Custom RuntimeException thrown when rate limiting thresholds are crossed.
+---
 
-#### 📂 Package: `com.resulthub.api.config`
-*   [ApplicationConfig.java](file:///backend/src/main/java/com/resulthub/api/config/ApplicationConfig.java): Instantiates the BCrypt password encoder, the Spring Security UserDetailsService, and the custom Jackson ObjectMapper.
-*   [WebConfig.java](file:///backend/src/main/java/com/resulthub/api/config/WebConfig.java): Global configuration enabling cross-origin requests (CORS) and registering the Bucket4j rate limiting interceptor across the application endpoints.
+#### 📂 `com.resulthub.api.auth`
+- **AuthController.java** — Register, login, logout, refresh-token endpoints.
+- **AuthService.java** — BCrypt password hashing, JWT generation, user validation, Google OAuth2 user provisioning.
+- **AuthRequest.java** *(dto)* — Login payload (email, password).
+- **AuthResponse.java** *(dto)* — JWT credentials + user metadata response.
+- **RegisterRequest.java** *(dto)* — Registration payload (name, email, password).
 
-#### 📂 Package: `com.resulthub.api.csv`
-*   [CsvImportController.java](file:///backend/src/main/java/com/resulthub/api/csv/CsvImportController.java): Multipart upload endpoint accepting CSV streams, validating the client role, and immediately spawning async jobs.
-*   [ImportJob.java](file:///backend/src/main/java/com/resulthub/api/csv/entity/ImportJob.java): Entity mapping the status and validation error summary log paths for background CSV tasks.
-*   [UploadedFile.java](file:///backend/src/main/java/com/resulthub/api/csv/entity/UploadedFile.java): Tracks binary size, original filename, and location details of uploaded files.
-*   [ImportStatus.java](file:///backend/src/main/java/com/resulthub/api/csv/enums/ImportStatus.java): State enum mapping jobs (`QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED`).
-*   [ImportJobResponse.java](file:///backend/src/main/java/com/resulthub/api/csv/dto/ImportJobResponse.java): API DTO for job progress checking.
-*   [ImportSummary.java](file:///backend/src/main/java/com/resulthub/api/csv/dto/ImportSummary.java): Details successful rows vs. failed rows on complete import runs.
-*   [UploadResponse.java](file:///backend/src/main/java/com/resulthub/api/csv/dto/UploadResponse.java): Acknowledges files immediately upon multipart upload.
-*   [ImportJobRepository.java](file:///backend/src/main/java/com/resulthub/api/csv/repository/ImportJobRepository.java): Database access interface for `import_jobs`.
-*   [UploadedFileRepository.java](file:///backend/src/main/java/com/resulthub/api/csv/repository/UploadedFileRepository.java): Database access interface for `uploaded_files`.
-*   [CsvImportService.java](file:///backend/src/main/java/com/resulthub/api/csv/service/CsvImportService.java): Heavy lifting parser implementing Apache Commons CSV stream processing and database-level batch inserts.
+---
 
-#### 📂 Package: `com.resulthub.api.dataset`
-*   [DatasetController.java](file:///backend/src/main/java/com/resulthub/api/dataset/DatasetController.java): CRUD controller to manage workspaces' datasets.
-*   [DatasetRecordController.java](file:///backend/src/main/java/com/resulthub/api/dataset/DatasetRecordController.java): REST endpoints to insert, edit, retrieve, and paginate individual record documents inside a dataset.
-*   [Dataset.java](file:///backend/src/main/java/com/resulthub/api/dataset/entity/Dataset.java): Mapped entity matching the `datasets` table, capturing properties like status and domain type with custom enums.
-*   [DatasetSchema.java](file:///backend/src/main/java/com/resulthub/api/dataset/entity/DatasetSchema.java): Contains raw JSON schema definitions used to structurally govern unstructured record payloads.
-*   [DatasetRecord.java](file:///backend/src/main/java/com/resulthub/api/dataset/entity/DatasetRecord.java): Generic data sink mapping postgres `JSONB` to a Java `Map<String, Object>` through `@JdbcTypeCode(SqlTypes.JSON)`.
-*   [DatasetStatus.java](file:///backend/src/main/java/com/resulthub/api/dataset/enums/DatasetStatus.java): Status enum (`DRAFT`, `PUBLISHED`, `ARCHIVED`).
-*   [DomainType.java](file:///backend/src/main/java/com/resulthub/api/dataset/enums/DomainType.java): Enum identifying publishing verticals (e.g. `ACADEMIC`, `SPORT`, `FINANCE`).
-*   [DatasetRequest.java](file:///backend/src/main/java/com/resulthub/api/dataset/dto/DatasetRequest.java): DTO mapping dataset creation parameters.
-*   [DatasetResponse.java](file:///backend/src/main/java/com/resulthub/api/dataset/dto/DatasetResponse.java): Standard output payload representing datasets.
-*   [DatasetSchemaRequest.java](file:///backend/src/main/java/com/resulthub/api/dataset/dto/DatasetSchemaRequest.java): DTO carrying structural Draft-7 JSON schema input definitions.
-*   [DatasetSchemaResponse.java](file:///backend/src/main/java/com/resulthub/api/dataset/dto/DatasetSchemaResponse.java): Response payload for schemas.
-*   [RecordRequest.java](file:///backend/src/main/java/com/resulthub/api/dataset/dto/RecordRequest.java): Input payload encapsulating generic map data and identifier keys.
-*   [RecordResponse.java](file:///backend/src/main/java/com/resulthub/api/dataset/dto/RecordResponse.java): Output payload encapsulating generic map data.
-*   [DatasetRepository.java](file:///backend/src/main/java/com/resulthub/api/dataset/repository/DatasetRepository.java): JPA repository for database lookup on datasets.
-*   [DatasetRecordRepository.java](file:///backend/src/main/java/com/resulthub/api/dataset/repository/DatasetRecordRepository.java): JPA repository for database lookup on dataset records.
-*   [DatasetSchemaRepository.java](file:///backend/src/main/java/com/resulthub/api/dataset/repository/DatasetSchemaRepository.java): JPA repository for schemas.
-*   [DatasetService.java](file:///backend/src/main/java/com/resulthub/api/dataset/service/DatasetService.java): Enforces access governance and manages CRUD logic on dataset contexts.
-*   [DatasetSchemaService.java](file:///backend/src/main/java/com/resulthub/api/dataset/service/DatasetSchemaService.java): Associates JSON validation schemas to datasets.
-*   [DatasetRecordService.java](file:///backend/src/main/java/com/resulthub/api/dataset/service/DatasetRecordService.java): Inserts records, executes validation checks, and updates text vectors.
-*   [SchemaValidationService.java](file:///backend/src/main/java/com/resulthub/api/dataset/service/SchemaValidationService.java): Evaluates structured inputs using standard Draft-7 `com.networknt.schema` json validators.
+#### 📂 `com.resulthub.api.common.exception`
+- **ErrorResponse.java** — Standardized error JSON model (timestamp, status, error, message, path).
+- **GlobalExceptionHandler.java** — `@ControllerAdvice` handling all exceptions without leaking stack traces. Covers: `EntityNotFoundException`, `AccessDeniedException`, `MethodArgumentNotValidException`, `ConstraintViolationException`, `DataIntegrityViolationException`, `ObjectOptimisticLockingFailureException`, `RateLimitExceededException`, `PayloadTooLargeException`, `UnsupportedMediaTypeException`, and generic `RuntimeException`.
+- **RateLimitExceededException.java** — Thrown when Bucket4j throttle is crossed (→ HTTP 429).
+- **PayloadTooLargeException.java** — Thrown when upload exceeds size limits (→ HTTP 413).
+- **UnsupportedMediaTypeException.java** — Thrown for invalid file MIME types (→ HTTP 415).
 
-#### 📂 Package: `com.resulthub.api.search`
-*   [SearchController.java](file:///backend/src/main/java/com/resulthub/api/search/SearchController.java): Endpoint for global public queries, offering real-time suggestions and filtered results.
-*   [SearchAnalytics.java](file:///backend/src/main/java/com/resulthub/api/search/entity/SearchAnalytics.java): Stores anonymous query logs for analytics.
-*   [SearchResult.java](file:///backend/src/main/java/com/resulthub/api/search/dto/SearchResult.java): Unified search result payload matching workspaces, datasets, or records.
-*   [SearchSuggestion.java](file:///backend/src/main/java/com/resulthub/api/search/dto/SearchSuggestion.java): Captures key phrases to autocomplete query parameters.
-*   [PaginatedSearchResponse.java](file:///backend/src/main/java/com/resulthub/api/search/dto/PaginatedSearchResponse.java): Standard pagination container matching the FTS results.
-*   [SearchAnalyticsRepository.java](file:///backend/src/main/java/com/resulthub/api/search/repository/SearchAnalyticsRepository.java): JPA repository for query analytics.
-*   [SearchRepository.java](file:///backend/src/main/java/com/resulthub/api/search/repository/SearchRepository.java): Performs complex native SQL full-text search `UNION ALL` queries with visibility joins.
-*   [SearchService.java](file:///backend/src/main/java/com/resulthub/api/search/service/SearchService.java): Performs logic routing and processes suggestions asynchronously.
+---
 
-#### 📂 Package: `com.resulthub.api.security`
-*   [JwtAuthenticationFilter.java](file:///backend/src/main/java/com/resulthub/api/security/JwtAuthenticationFilter.java): Intercepts requests, extracts JWTs, and registers valid users on the Spring Security context.
-*   [JwtService.java](file:///backend/src/main/java/com/resulthub/api/security/JwtService.java): Signs, parses, and validates stateless authentication tokens.
-*   [RateLimitInterceptor.java](file:///backend/src/main/java/com/resulthub/api/security/RateLimitInterceptor.java): Restricts execution speed dynamically based on client IP addresses.
-*   [RateLimitService.java](file:///backend/src/main/java/com/resulthub/api/security/RateLimitService.java): Configures Bucket4j token bucket structures.
-*   [SecurityConfig.java](file:///backend/src/main/java/com/resulthub/api/security/SecurityConfig.java): Registers filters, disables CSRF, configures OAuth2 Google Login, and sets path protection policies.
+#### 📂 `com.resulthub.api.complaint`
 
-#### 📂 Package: `com.resulthub.api.user`
-*   [User.java](file:///backend/src/main/java/com/resulthub/api/user/User.java): Identity model mapped to PostgreSQL table mapping credentials and roles.
-*   [UserRole.java](file:///backend/src/main/java/com/resulthub/api/user/UserRole.java): Roles mapping system administrators (`ADMIN`, `USER`).
-*   [UserRepository.java](file:///backend/src/main/java/com/resulthub/api/user/UserRepository.java): Handles database persistence for `users`.
+**Pillar B: Complaint Box** — Full Reddit-style complaint board.
 
-#### 📂 Package: `com.resulthub.api.workspace`
-*   [WorkspaceController.java](file:///backend/src/main/java/com/resulthub/api/workspace/WorkspaceController.java): REST controller managing workspace registration, visibility overrides, and detail fetching.
-*   [MemberController.java](file:///backend/src/main/java/com/resulthub/api/workspace/MemberController.java): Manages workspace member invites and status changes.
-*   [Workspace.java](file:///backend/src/main/java/com/resulthub/api/workspace/entity/Workspace.java): Main workspace entity defining name, slug, access visibility, and owner mapping.
-*   [WorkspaceMember.java](file:///backend/src/main/java/com/resulthub/api/workspace/entity/WorkspaceMember.java): Relational join entity mapping a user to a workspace, tracking membership joined timestamp and roles.
-*   [WorkspaceInvitation.java](file:///backend/src/main/java/com/resulthub/api/workspace/entity/WorkspaceInvitation.java): Details pending invitations sent out via tokens.
-*   [VisibilityMode.java](file:///backend/src/main/java/com/resulthub/api/workspace/enums/VisibilityMode.java): Defines access configuration (`PUBLIC`, `PASSWORD_PROTECTED`, `PRIVATE`).
-*   [WorkspaceRole.java](file:///backend/src/main/java/com/resulthub/api/workspace/enums/WorkspaceRole.java): Enforces the workspace RBAC permission scope (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`).
-*   [CreateWorkspaceRequest.java](file:///backend/src/main/java/com/resulthub/api/workspace/dto/CreateWorkspaceRequest.java): Payload containing metadata for new workspace initialization.
-*   [WorkspaceResponse.java](file:///backend/src/main/java/com/resulthub/api/workspace/dto/WorkspaceResponse.java): Response payload representing workspaces.
-*   [UpdateWorkspaceRequest.java](file:///backend/src/main/java/com/resulthub/api/workspace/dto/UpdateWorkspaceRequest.java): Payload mapping workspace modifications.
-*   [InviteMemberRequest.java](file:///backend/src/main/java/com/resulthub/api/workspace/dto/InviteMemberRequest.java): Payload specifying the email and role of invitees.
-*   [InvitationResponse.java](file:///backend/src/main/java/com/resulthub/api/workspace/dto/InvitationResponse.java): Response payload mapping active invitation tokens.
-*   [MemberResponse.java](file:///backend/src/main/java/com/resulthub/api/workspace/dto/MemberResponse.java): Response payload mapping active workspace members.
-*   [WorkspaceRepository.java](file:///backend/src/main/java/com/resulthub/api/workspace/repository/WorkspaceRepository.java): Access repository for workspaces.
-*   [WorkspaceMemberRepository.java](file:///backend/src/main/java/com/resulthub/api/workspace/repository/WorkspaceMemberRepository.java): Access repository for member joins.
-*   [WorkspaceInvitationRepository.java](file:///backend/src/main/java/com/resulthub/api/workspace/repository/WorkspaceInvitationRepository.java): Access repository for invitations.
-*   [WorkspaceService.java](file:///backend/src/main/java/com/resulthub/api/workspace/service/WorkspaceService.java): Performs visibility checks, assigns owners, and generates access codes.
-*   [WorkspaceMemberService.java](file:///backend/src/main/java/com/resulthub/api/workspace/service/WorkspaceMemberService.java): Enforces member-level access modifications.
-*   [WorkspaceInvitationService.java](file:///backend/src/main/java/com/resulthub/api/workspace/service/WorkspaceInvitationService.java): Generates secure invitations and processes registration tokens.
+- **ComplaintController.java** *(controller)* — REST endpoints:
+  - `GET /api/v1/complaints` — Public feed with `?sort=trending|top|new`, category and status filters, pagination.
+  - `GET /api/v1/complaints/{id}` — Single complaint with comments and vote counts.
+  - `POST /api/v1/complaints` — JWT-required; multipart form data with optional images.
+  - `POST /api/v1/complaints/{id}/vote` — Up/down vote with toggle support.
+  - `POST /api/v1/complaints/{id}/comments` — JWT-required; add a comment.
+  - `PATCH /api/v1/complaints/{id}/status` — Admin-only status change (`OPEN` → `UNDER_REVIEW` → `RESOLVED`).
+  - `POST /api/v1/complaints/{id}/flag` — Flag for moderation.
+- **Complaint.java** *(entity)* — Maps `complaints` table. Fields: `id`, `creatorId`, `category`, `title`, `description`, `mediaUrls` (TEXT[]), `latitude`, `longitude`, `locationName`, `status`, `isAnonymous`, `flagCount`, `upvotes`, `downvotes`, `netScore`.
+- **ComplaintVote.java** *(entity)* — Maps `complaint_votes` with `VoteType` enum (`UP`, `DOWN`). Unique constraint on (complaint_id, voter_id).
+- **ComplaintComment.java** *(entity)* — Maps `complaint_comments` with `creatorId`, `content`, `isAnonymous`.
+- **ComplaintRepository.java** — JPA + native paginated queries with trending/top/new sort modes.
+- **ComplaintVoteRepository.java** — Finds existing votes per user per complaint.
+- **ComplaintCommentRepository.java** — Finds comments by complaint ID.
+- **ComplaintService.java** — Core business logic: vote toggle, optimistic update, status management, flagging.
+- **ComplaintMediaService.java** — Handles multipart image upload to local filesystem; enforces `PayloadTooLargeException` and `UnsupportedMediaTypeException` guards.
+- **CreateComplaintRequest.java** *(dto)* — Multipart complaint creation payload.
+- **CastVoteRequest.java** *(dto)* — `{ voteType: UP|DOWN }`.
+- **ComplaintResponse.java** *(dto)* — Full complaint API response including vote counts, user vote state, and media URLs.
+- **ComplaintCommentResponse.java** *(dto)* — Comment list item response.
+
+---
+
+#### 📂 `com.resulthub.api.config`
+- **ApplicationConfig.java** — BCrypt encoder, `UserDetailsService`, Jackson `ObjectMapper` bean.
+- **WebConfig.java** — CORS configuration, Bucket4j rate limit interceptor registration, MVC configuration.
+
+---
+
+#### 📂 `com.resulthub.api.csv`
+- **CsvImportController.java** — Multipart CSV upload endpoint; spawns async import jobs.
+- **ImportJob.java** *(entity)* — Tracks job status and error summary.
+- **UploadedFile.java** *(entity)* — Tracks filename, size, and storage path.
+- **ImportStatus.java** *(enum)* — `QUEUED`, `PROCESSING`, `COMPLETED`, `FAILED`.
+- **ImportJobResponse.java** / **ImportSummary.java** / **UploadResponse.java** *(dto)* — Job tracking payloads.
+- **ImportJobRepository.java** / **UploadedFileRepository.java** — JPA repositories.
+- **CsvImportService.java** — Apache Commons CSV stream parsing with 1,000-row batch inserts.
+
+---
+
+#### 📂 `com.resulthub.api.dataset`
+- **DatasetController.java** — CRUD for workspace datasets (create, update, publish, archive).
+- **DatasetRecordController.java** — Insert, edit, retrieve, and paginate individual JSONB records.
+- **Dataset.java** *(entity)* — Maps `datasets` table; uses `@JdbcTypeCode(SqlTypes.NAMED_ENUM)` for `status` and `domainType`.
+- **DatasetSchema.java** *(entity)* — JSON Draft-7 schema definition for record validation.
+- **DatasetRecord.java** *(entity)* — Generic data store; maps PostgreSQL `JSONB` to `Map<String, Object>` via `@JdbcTypeCode(SqlTypes.JSON)`. Includes `@Version` field for optimistic locking (added in V9 migration).
+- **DatasetStatus.java** *(enum)* — `DRAFT`, `PUBLISHED`, `ARCHIVED`.
+- **DomainType.java** *(enum)* — `ACADEMIC`, `SPORT`, `FINANCE`, `POLITICS`, `LAW`, `ENTERTAINMENT`, `TECH`, `GOVERNMENT`, `HYPERLOCAL`.
+- **DatasetRequest.java** / **DatasetResponse.java** / **RecordRequest.java** / **RecordResponse.java** / **DatasetSchemaRequest.java** / **DatasetSchemaResponse.java** *(dto)* — CRUD payload models.
+- **DatasetRepository.java** / **DatasetRecordRepository.java** / **DatasetSchemaRepository.java** — JPA repositories.
+- **DatasetService.java** — Access governance, CRUD logic, visibility enforcement.
+- **DatasetRecordService.java** — Insert/update records, trigger text-search vector updates.
+- **DatasetSchemaService.java** — Associates JSON schemas to datasets.
+- **SchemaValidationService.java** — Validates records against Draft-7 schemas using `com.networknt.schema`.
+
+---
+
+#### 📂 `com.resulthub.api.outbox`
+
+**Transactional Outbox Pattern** — Guarantees reliable event delivery even in crash scenarios.
+
+- **WriteOutboxEvent.java** *(entity)* — Maps `write_outbox_events` table; holds `aggregateType`, `aggregateId`, `eventType`, and `payload` (JSON).
+- **WriteOutboxEventRepository.java** — JPA repository for outbox events.
+- **WriteOutboxPublisher.java** — Scheduled publisher that reads unprocessed outbox events and dispatches them.
+
+---
+
+#### 📂 `com.resulthub.api.pdf`
+- **PdfImportController.java** — Multipart PDF upload endpoint; delegates to `PdfImportService`.
+- **PdfImportService.java** *(service)* — Apache PDFBox text extraction pipeline, creating dataset records from parsed PDF content.
+
+---
+
+#### 📂 `com.resulthub.api.search`
+- **SearchController.java** — Global search with suggestions and full-text results.
+- **SearchAnalytics.java** *(entity)* — Stores anonymous query logs.
+- **SearchResult.java** / **SearchSuggestion.java** / **PaginatedSearchResponse.java** *(dto)* — Search response payloads.
+- **SearchRepository.java** — Native SQL `UNION ALL` full-text search with visibility joins.
+- **SearchAnalyticsRepository.java** — Query log repository.
+- **SearchService.java** — Routes queries and processes suggestions asynchronously.
+
+---
+
+#### 📂 `com.resulthub.api.security`
+- **JwtAuthenticationFilter.java** — Extracts and validates JWTs; registers user on Spring Security context.
+- **JwtService.java** — Signs, parses, and validates stateless JWT tokens.
+- **RateLimitInterceptor.java** — Bucket4j IP-based interceptor; bypasses `ADMIN` users.
+- **RateLimitService.java** — Configures token bucket structures (100 req/min per IP default).
+- **SecurityConfig.java** — Registers filters, disables CSRF, configures Google OAuth2, sets path protection policies.
+
+---
+
+#### 📂 `com.resulthub.api.user`
+- **User.java** — Identity model mapped to `users` table; credentials, roles, Google OAuth fields.
+- **UserRole.java** *(enum)* — `ADMIN`, `USER`.
+- **UserRepository.java** — CRUD for `users`.
+
+---
+
+#### 📂 `com.resulthub.api.voting`
+
+**Pillar C: Voting Hub** — Public/private/password-protected polls.
+
+- **VoteBoxController.java** *(controller)* — REST endpoints:
+  - `GET /api/v1/votes` — Public vote box feed (paginated).
+  - `GET /api/v1/votes/{id}` — Detail; respects `PUBLIC` / `PASSWORD_PROTECTED` / `PRIVATE` visibility.
+  - `POST /api/v1/votes` — JWT-required; create vote box with options.
+  - `POST /api/v1/votes/{id}/cast` — Cast a vote; public boxes allow anonymous (IP/fingerprint 24h anti-spam), private requires JWT.
+  - `GET /api/v1/votes/{id}/results` — Option counts and percentages.
+  - `POST /api/v1/votes/{id}/unlock` — Unlock password-protected box; returns `Workspace <token>`.
+- **VoteBox.java** *(entity)* — Maps `vote_boxes`; includes `visibility`, `accessCodeHash`, `endsAt`, `creatorId`.
+- **VoteOption.java** *(entity)* — Individual option within a vote box.
+- **VoteResponse.java** *(entity)* — Stores a single cast vote; tracks `voterId` (nullable for anonymous), `ipAddress`, and `deviceFingerprint`.
+- **VoteBoxRepository.java** / **VoteOptionRepository.java** / **VoteResponseRepository.java** — JPA repositories.
+- **VoteBoxService.java** — Voting logic: expiry check (→ 410 Gone), visibility access, anti-spam duplicate detection, result aggregation.
+- **CastVoteRequest.java** *(dto)* — `{ optionId, deviceFingerprint }`.
+- **CreateVoteBoxRequest.java** *(dto)* — Vote box creation with list of option texts, visibility, end date.
+- **UnlockVoteBoxRequest.java** *(dto)* — `{ accessCode }`.
+- **VoteBoxResponse.java** *(dto)* — Full poll response including options, vote counts, user's selection state.
+- **VoteResultsResponse.java** *(dto)* — Per-option result with count and percentage.
+- **TokenResponse.java** *(dto)* — `{ token }` returned on successful unlock.
+
+---
+
+#### 📂 `com.resulthub.api.workspace`
+- **WorkspaceController.java** — CRUD for workspace registration, visibility overrides, member management, slug-based lookup, and workspace token unlock.
+- **MemberController.java** — Workspace member invitations and role changes.
+- **Workspace.java** *(entity)* — Name, slug, `VisibilityMode`, `accessCodeHash`, owner, `domainType`.
+- **WorkspaceMember.java** *(entity)* — Join table mapping user ↔ workspace with `WorkspaceRole`.
+- **WorkspaceInvitation.java** *(entity)* — Pending invitation with secure token.
+- **VisibilityMode.java** *(enum)* — `PUBLIC`, `PASSWORD_PROTECTED`, `PRIVATE`.
+- **WorkspaceRole.java** *(enum)* — `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`.
+- **CreateWorkspaceRequest.java** / **UpdateWorkspaceRequest.java** / **WorkspaceResponse.java** / **InviteMemberRequest.java** / **InvitationResponse.java** / **MemberResponse.java** *(dto)* — Workspace API payloads.
+- **WorkspaceRepository.java** / **WorkspaceMemberRepository.java** / **WorkspaceInvitationRepository.java** — JPA repositories.
+- **WorkspaceService.java** — Visibility enforcement, slug generation, access code BCrypt hashing, workspace-token issuance.
+- **WorkspaceMemberService.java** — Member role management.
+- **WorkspaceInvitationService.java** — Secure invitation generation and redemption.
 
 ---
 
 ### 2.2 Frontend Modules (`lib/`)
 
-#### 📂 Core Files
-*   [main.dart](file:///lib/main.dart): The application entry point initializes the widgets binding, bootstraps the Firebase instance synchronously, registers the global custom Light Theme, and boots into the `SplashScreen`.
-
-#### 📂 Package: `core/`
-*   [api_client.dart](file:///lib/core/network/api_client.dart): Main Dio networking singleton. Configured with interceptors that dynamically read authorization JWTs from secure storage, inject `Authorization: Bearer <token>` headers, and capture connection timeout errors gracefully.
-*   [secure_storage.dart](file:///lib/core/storage/secure_storage.dart): Wrapper utilizing the `flutter_secure_storage` package to persist JWT credentials locally.
-
-#### 📂 Package: `models/`
-*   [domain_model.dart](file:///lib/models/domain_model.dart): Holds enum types for the core vertical channels (`DomainType`: academic, sport, government, politics, finance, entertainment, tech, law, hyperLocal), visibility states, status variables, subcategory mapping, and initial mock data catalogs.
-*   [result_model.dart](file:///lib/models/result_model.dart): Model detailing academic result records (student name, roll number, grades, credits, GPA, subjects).
-*   [govt_model.dart](file:///lib/models/govt_model.dart): Model detailing government results (roll number, candidate name, marks, rank, selection status).
-
-#### 📂 Package: `services/`
-*   [api_service.dart](file:///lib/services/api_service.dart): Connects the UI to Spring Boot REST endpoints, fetching public workspaces, dataset records, and transmitting multipart CSV files via `FormData`. Also hosts mock fallbacks to prevent crashes on offline staging servers.
-*   [auth_service.dart](file:///lib/services/auth_service.dart): Connects to Firebase Authentication, and features a Google Sign-In helper fully migrated to modern `GoogleSignIn.instance` (v7+) API patterns.
-
-#### 📂 Package: `screens/`
-*   [splash_screen.dart](file:///lib/screens/splash_screen.dart):Tactile startup screen executing entry animations before navigating into interests selection.
-*   [onboarding_screen.dart](file:///lib/screens/onboarding_screen.dart): Captures the user's category interests (UPSC, SSC, Engineering, etc.) via animated chips, saving preferences before entering the home feed.
-*   [main_scaffold.dart](file:///lib/screens/main_scaffold.dart): Primary container framing the bottom navigation menu (Home, Explore, Saved, Profile).
-*   [home_screen.dart](file:///lib/screens/home_screen.dart): Dynamic primary dashboard rendering domain shortcut grids, live notifications, trending scorecards, and featured updates.
-*   [search_screen.dart](file:///lib/screens/search_screen.dart): Offers a search field with real-time autocompletes, recent query history, and category navigation.
-*   [search_results_screen.dart](file:///lib/screens/search_results_screen.dart): Pulls matching items from the full-text search backend and renders polymorphic cards based on the matching item type.
-*   [bookmarks_screen.dart](file:///lib/screens/bookmarks_screen.dart): Lists records and datasets locally saved for offline reading.
-*   [profile_screen.dart](file:///lib/screens/profile_screen.dart): Account screen showcasing user metadata, login state gates, and paths to preferences/settings screens.
-*   [login_screen.dart](file:///lib/screens/login_screen.dart): Credential portal for email/password and Google Sign-in.
-*   [signup_screen.dart](file:///lib/screens/signup_screen.dart): Identity registration page.
-*   [forgot_password_screen.dart](file:///lib/screens/forgot_password_screen.dart): Sends recovery details.
-*   [credential_screen.dart](file:///lib/screens/credential_screen.dart): The result lookup verification gate requiring inputs like Roll Number or Date of Birth before displaying records.
-*   [result_detail_screen.dart](file:///lib/screens/result_detail_screen.dart): Elegant academic details scorecard detailing scores, grade distributions, and GPA.
-*   [govt_detail_screen.dart](file:///lib/screens/govt_detail_screen.dart): Dashboard detailing state/national government list lookups and select status details.
-*   [sports_feed_screen.dart](file:///lib/screens/sports_feed_screen.dart): Sports scorecard parsing matches, teams, status, and running event details.
-*   [politics_screen.dart](file:///lib/screens/politics_screen.dart): Election dashboard compiling constituency results and vote shares via progress charts.
-*   [finance_screen.dart](file:///lib/screens/finance_screen.dart): Market scoreboard listing prices, percent changes, and tickers.
-*   [law_screen.dart](file:///lib/screens/law_screen.dart): Portal showcasing legal verdicts, CPWD bid catalogs, and tender announcements.
-*   [entertainment_screen.dart](file:///lib/screens/entertainment_screen.dart): Lists box office numbers, music charts, and award winners.
-*   [tech_screen.dart](file:///lib/screens/tech_screen.dart): Displays benchmark metrics, GPU reviews, and store listings.
-*   [local_workspace_screen.dart](file:///lib/screens/local_workspace_screen.dart): Displays workspaces with subcategories and records.
-*   [create_workspace_screen.dart](file:///lib/screens/create_workspace_screen.dart): Wizard form allowing administrators to establish new workspaces and choose visibility modes (Public, Protected, Private).
-*   [subcategory_screen.dart](file:///lib/screens/subcategory_screen.dart): Details category list directories.
-
-#### 📂 Package: `screens/admin/`
-*   [admin_scaffold.dart](file:///lib/screens/admin/admin_scaffold.dart): Left navigation shell organizing administrative control views.
-*   [admin_dashboard_screen.dart](file:///lib/screens/admin/admin_dashboard_screen.dart): Admin summary analytics dashboard detailing view trajectories and file statuses.
-*   [upload_center_screen.dart](file:///lib/screens/admin/upload_center_screen.dart): Selects local CSV files, validates format columns, and runs background multipart imports to the Spring Boot server.
-*   [manage_results_screen.dart](file:///lib/screens/admin/manage_results_screen.dart): Form allowing administrators to insert or edit records manually.
-*   [manage_team_screen.dart](file:///lib/screens/admin/manage_team_screen.dart): Controls access roles (`EDITOR`, `ADMIN`, `VIEWER`) within a workspace.
-*   [admin_settings_screen.dart](file:///lib/screens/admin/admin_settings_screen.dart): Adjusts system tolerances and credentials validation constraints.
-
-#### 📂 Package: `screens/profile_pages/`
-*   [personal_details_screen.dart](file:///lib/screens/profile_pages/personal_details_screen.dart): Form to change username or profile parameters.
-*   [my_workspaces_screen.dart](file:///lib/screens/profile_pages/my_workspaces_screen.dart): Lists workspaces created or managed by the user.
-*   [notifications_settings_screen.dart](file:///lib/screens/profile_pages/notifications_settings_screen.dart): Controls notification categories and triggers.
-*   [recently_viewed_screen.dart](file:///lib/screens/profile_pages/recently_viewed_screen.dart): History tracking list.
-*   [language_screen.dart](file:///lib/screens/profile_pages/language_screen.dart): Preference toggles.
-*   [help_center_screen.dart](file:///lib/screens/profile_pages/help_center_screen.dart): User support repository.
-*   [legal_screen.dart](file:///lib/screens/profile_pages/legal_screen.dart): License information, Terms, and Privacy Policies.
+#### 📂 `main.dart`
+Application entry point: initializes `WidgetsBinding`, bootstraps Firebase, applies `AppTheme`, and mounts `ProviderScope` with `go_router`.
 
 ---
 
-## 3. Database Architecture & Migrations
+#### 📂 `core/`
 
-ResultHub manages unstructured records through a unified PostgreSQL relational-document layout. This avoids table bloating across various domains, maintaining maximum read speed.
-
-### 3.1 Relational Schema and Triggers
-*   **Generic JSONB Storage**: The `dataset_records` table holds data in a `data` `JSONB` column. 
-*   **Real-time Indexing Trigger**: An automated database trigger listens to all `INSERT` and `UPDATE` calls on `workspaces`, `datasets`, and `dataset_records`. It merges title, description, tags, and JSON keys into the `search_vector` (`tsvector`) column automatically.
-*   **GIN Wildcard Indexing**: A Generalized Inverted Index (`GIN`) is registered over the `search_vector` fields, allowing instantaneous prefix matches.
-*   **Audit Logging**: The `audit_logs` table logs user actions, capturing `old_value` and `new_value` as JSON nodes to keep full history.
-*   **Declarative Table Partitioning**: Due to the high volume of analytical metrics, `analytics_events` is partitioned dynamically by month on the `created_at` timestamp.
-
-### 3.2 SQL Migrations Catalog (`db/migration/`)
-*   `V1__init_users_table.sql`: Creates core `users` mapping identity details and roles.
-*   `V2__init_workspace_tables.sql`: Establishes `workspaces`, roles enums, `workspace_members`, and secure pending invitation codes.
-*   `V3__init_dataset_tables.sql`: Establishes `datasets`, validations `dataset_schemas` (Draft-7 models), and the unstructured `dataset_records` holding the document data payload.
-*   `V4__init_csv_import_tables.sql`: Establishes tables tracing asynchronous multipart uploading progress.
-*   `V5__init_search_and_analytics.sql`: Adds `search_vector` attributes, establishes full-text indexing triggers, and registers GIN index configurations.
-*   `V6__init_analytics_tables.sql`: Builds the partitioned analytics events logging table.
+| File | Purpose |
+|---|---|
+| `core/network/api_client.dart` | Dio singleton with interceptors: JWT injection from secure storage, 401-triggered token refresh, timeout handling. |
+| `core/storage/secure_storage.dart` | `flutter_secure_storage` wrapper for JWT and workspace tokens. |
+| `core/routing/app_router.dart` | `GoRouter` with `StatefulShellRoute.indexedStack` for 4 independent bottom-nav stacks. Deep links: `/w/:slug`, `/workspace/:id`, `/complaints/:id`, `/votes/:id`. Auth routes: `/login`, `/signup`. |
+| `core/providers/workspace_unlock_provider.dart` | `Notifier<WorkspaceUnlockStateData>` managing workspace password-unlock flow state. |
+| `core/auth/auth_guard.dart` | Route guard redirecting unauthenticated users to `/login`. |
+| `core/theme/app_theme.dart` | Material 3 `ThemeData` with Google Fonts Inter, custom color scheme, and component overrides. |
 
 ---
 
-## 4. Production Security & Exception Sanitization
+#### 📂 `models/`
 
-The system runs with an active security envelope guarding private domains and preventing service abuse.
-
-### 4.1 Stateless Access & Token Configuration
-*   **JWT Implementation**: Short-lived Access Tokens (1-day) and secure Refresh Tokens (7-days) verify user authorization statelessly.
-*   **CORS Policies**: Explicitly restricts browser-based cross-origin calls to the staging/production domain addresses.
-*   **Workspace Visibility Gates**: Enforced at the service level, the API rejects dataset lookup queries for `PRIVATE` workspaces unless the user is a verified member, and prompts for code inputs on `PASSWORD_PROTECTED` channels.
-
-### 4.2 Traffic Flow Control (Bucket4j Rate Limiting)
-*   **Token Bucket Intercepting**: Public query endpoints are rate limited via `Bucket4j` to prevent automated scraping.
-*   **Threshold Settings**: Public accesses are throttled at a ceiling of 100 requests per minute per IP address.
-*   **Admin Bypass**: Authenticated system `ADMIN` roles are automatically excluded from throttling filters to avoid stalling high-volume CSV uploads.
-
-### 4.3 Centralized Error Sanitization
-*   **No Stack Trace Leakage**: Production profiles intercept all internal JVM exceptions (SQL issues, validation errors, null pointer checks) via `GlobalExceptionHandler`.
-*   **Generic Response Format**: All failures return a clean JSON error response, returning generic HTTP statuses like `400 Bad Request` or `500 Internal Server Error` without revealing database schemas or raw error context to consumers.
+| File | Purpose |
+|---|---|
+| `domain_model.dart` | `DomainType` enum (academic, sport, government, politics, finance, entertainment, tech, law, hyperLocal); subcategory and availability data catalog. |
+| `result_model.dart` | Academic result record (student name, roll number, grades, GPA, subjects). |
+| `govt_model.dart` | Government exam result (roll number, candidate, marks, rank, selection status). |
+| `complaint_model.dart` | `ComplaintModel` PODO; `copyWith` supporting optimistic vote updates (`upvotes`, `downvotes`, `netScore`, `hasUserVoted`). |
+| `complaint_comment_model.dart` | `ComplaintCommentModel` — comment display data. |
+| `vote_box_model.dart` | `VoteBoxModel`, `VoteOptionModel`, `VoteResultsModel`; `copyWith` for optimistic vote casting. |
 
 ---
 
-## 5. UI Rendering & Client Networking
+#### 📂 `services/`
 
-The Flutter frontend maintains UI speed and dynamic rendering across generic datasets.
-
-### 5.1 Polymorphic Widget Generation (`RecordCardFactory`)
-Because records are returned as generic `JSONB` schemas, the Flutter frontend uses a dynamic rendering pattern:
-*   Rather than hardcoding hundreds of custom widgets, the UI evaluates the dataset's `DomainType` (e.g. `academic`, `sport`, `politics`) and the properties present in the JSON keys.
-*   The system dynamically renders tabular lists for education metrics, side-by-side comparison tables for sports events, and colored progress trackers for election datasets.
-
-### 5.2 Resilient Client Networking
-*   **Token Refresh Interceptors**: The Dio `ApiClient` is configured with interceptors to handle token rotation. Upon receiving a `401 Unauthorized` response, it pauses pending calls, initiates a refresh query, updates secure storage, and retries the failed requests seamlessly.
-*   **Fallback Mock Systems**: FutureBuilders include custom mockup generators to return rich, readable data if server services are unreachable.
+| File | Purpose |
+|---|---|
+| `api_service.dart` | All REST calls to Spring Boot: workspaces, datasets, records, search, analytics, complaints (CRUD, vote, comment), vote boxes (CRUD, cast, results, unlock), media upload. Riverpod `Provider` exposed as `apiServiceProvider`. |
+| `auth_service.dart` | Firebase email/password auth and Google Sign-In (v7 `GoogleSignIn.instance` API). |
 
 ---
 
-## 6. Staging & SRE Testing Protocols
+#### 📂 `providers/`
 
-### 6.1 Dockerized Testcontainers Quality Assurance
-The codebase enforces automated checks using **Testcontainers JUnit 5** test suites:
-*   **Environment Mirroring**: Spin up real PostgreSQL 16 container instances dynamically.
-*   **Triggers Testing**: Ensures full-text search triggers, validation schemas, and analytical partitions perform exactly as they would in production.
-*   **Singleton Pattern Optimization**: Employs a shared singleton container context to launch PostgreSQL once per JVM lifecycle, avoiding Hikari connection pool timeouts.
+All notifiers updated to **Riverpod 3.x** (`Notifier` / `AsyncNotifier` / `FamilyAsyncNotifier`):
 
-### 6.2 CI/CD Pipeline & Delivery
-*   **Automated Verification**: GitHub actions trigger compile checks and Testcontainers validation on every push to main.
-*   **Rollout Strategy**: Successful builds compile into multi-stage Alpine Docker images and deploy to VPS clusters. Flutter builds bundle to statically served web files deployed via global CDNs for fast public edge delivery.
+| File | Class | Provider Type | Purpose |
+|---|---|---|---|
+| `badge_notifier.dart` | `BadgeNotifier` | `Notifier<BadgeState>` | Tracks unread complaint count (vs. last-visit timestamp in secure storage) and active-polls indicator. |
+| `complaint_feed_notifier.dart` | `ComplaintFeedNotifier` | `Notifier<ComplaintFeedState>` (family: `String` sortType) | Paginated complaint feed per tab (trending/top/new); optimistic vote updates; filter by category/status. |
+| `domain_feed_notifier.dart` | `DomainFeedNotifier` | `FamilyAsyncNotifier<List<DomainFeedItem>, DomainType>` | Fetches public workspaces by domain, then datasets and records; polls every 15s for sport/politics domains. |
+| `live_dataset_notifier.dart` | `LiveDatasetNotifier` | `StateNotifier<AsyncValue<List>>` (family: `String` datasetId) | Live record polling with `WidgetsBindingObserver` for pause/resume lifecycle awareness. |
+| `voting_hub_notifier.dart` | `VotingHubNotifier` | `Notifier<VotingHubState>` | Paginated public poll feed; optimistic vote casting with device fingerprint; `addVoteBoxOptimistic`. |
+| `dynamic_domains_provider.dart` | — | `FutureProvider` | Fetches available domain types for the home feed grid. |
+
+---
+
+#### 📂 `screens/` — Core Navigation
+
+| File | Purpose |
+|---|---|
+| `splash_screen.dart` | Animated entry screen (scale + opacity), navigates to `/onboarding` after 3 seconds. |
+| `onboarding_screen.dart` | Category interest selection (animated chips); saves preferences to `SharedPreferences`. |
+| `main_shell.dart` | `StatefulShellRoute` shell — `NavigationBar` with 4 tabs: Results, Complaints, Voting, Profile. Badge overlay on Complaints and Voting tabs driven by `badgeProvider`. |
+| `home_screen.dart` | Primary results dashboard: domain shortcut grid, trending scorecards, live updates, featured workspaces. |
+| `login_screen.dart` | Email/password + Google Sign-In portal. Uses `context.go()` for go_router navigation. |
+| `signup_screen.dart` | Registration form with validation. |
+| `forgot_password_screen.dart` | Password recovery via Firebase. |
+| `search_screen.dart` | Search with real-time autocomplete and recent history. |
+| `search_results_screen.dart` | Full-text search results with polymorphic card rendering. |
+| `bookmarks_screen.dart` | Locally saved records via `SharedPreferences`. |
+| `profile_screen.dart` | Account details, login state gates, navigation to sub-pages. |
+| `credential_screen.dart` | Result lookup gate (Roll Number, DOB input) before showing records. |
+| `result_detail_screen.dart` | Scorecard: `domainName`, `icon`, `recordData` (generic JSONB map), `datasetName`. Screenshot + share. |
+| `govt_detail_screen.dart` | Government exam result detail view. |
+| `local_workspace_screen.dart` | Workspace detail view: subcategory list, published datasets, record browser. |
+| `workspace_resolver_screen.dart` | Slug-based workspace resolver handling Public / Password / Private routing. |
+| `password_unlock_screen.dart` | Password entry screen for `PASSWORD_PROTECTED` workspaces. Accepts optional `initialCode`. |
+| `subcategory_screen.dart` | Category subcategory directory with tab-based navigation. Routes to domain-specific screens. |
+| `create_workspace_screen.dart` | Wizard to create workspace (name, domain, visibility, optional access code). |
+| `notifications_screen.dart` | System notifications list. |
+
+---
+
+#### 📂 `screens/complaints/` — Pillar B UI
+
+| File | Purpose |
+|---|---|
+| `complaint_feed_screen.dart` | 3-tab feed (Trending / Top / New); category and status filter chips; infinite scroll; FAB → `CreateComplaintScreen`; pull-to-refresh. |
+| `complaint_detail_screen.dart` | Full complaint view with up/down voting, comment thread, media gallery, status badge, report/flag action. |
+| `create_complaint_screen.dart` | Multipart complaint creation: category, title, description, location picker (map), media upload, anonymous toggle. |
+
+---
+
+#### 📂 `screens/voting/` — Pillar C UI
+
+| File | Purpose |
+|---|---|
+| `voting_hub_screen.dart` | 2-tab layout (Public Polls / My Polls); infinite scroll; FAB → `CreateVoteBoxScreen`; pull-to-refresh. |
+| `vote_box_detail_screen.dart` | Poll detail: visibility badge, expiry countdown, option list (pre-vote), animated result bars (post-vote), share button. Handles password-protected unlock flow. |
+| `create_vote_box_screen.dart` | Poll creation wizard: title, description, options list (add/remove), visibility, optional end date, optional access code. |
+
+---
+
+#### 📂 `screens/admin/` — Admin Pillar
+
+| File | Purpose |
+|---|---|
+| `admin_scaffold.dart` | Left navigation shell for admin views. |
+| `admin_dashboard_screen.dart` | Analytics dashboard with view trajectories, dataset status overview, and chart widgets. |
+| `upload_center_screen.dart` | CSV and file upload: file picker, column validation preview, multipart import to backend. |
+| `manage_results_screen.dart` | Full-form JSONB record editor for manual data entry/editing. |
+| `quick_score_entry_screen.dart` | **Fast numeric-only entry screen** for live field use (cricket scorer, election volunteer). Fetches existing record, renders numeric fields with `+`/`-` step buttons and long-press acceleration. PATCH debounced to backend. |
+| `manage_team_screen.dart` | Workspace member role management (EDITOR / ADMIN / VIEWER). |
+| `admin_settings_screen.dart` | System settings: validation constraints, credential overrides, workspace sharing. |
+| `complaint_moderation_screen.dart` | Admin complaint moderation: status transition controls (`OPEN` → `UNDER_REVIEW` → `RESOLVED`), flag review queue. |
+
+---
+
+#### 📂 `screens/profile_pages/`
+
+| File | Purpose |
+|---|---|
+| `personal_details_screen.dart` | Edit username and profile parameters. |
+| `my_workspaces_screen.dart` | Workspaces owned or managed by the user. |
+| `notifications_settings_screen.dart` | Notification category toggles. |
+| `recently_viewed_screen.dart` | Browsing history tracking. |
+| `language_screen.dart` | Language preference selection. |
+| `help_center_screen.dart` | User support and FAQ. |
+| `legal_screen.dart` | Terms, Privacy Policy, open-source licenses. |
+
+---
+
+#### 📂 `widgets/`
+
+| File | Purpose |
+|---|---|
+| `record_card_factory.dart` | **Polymorphic JSONB card renderer** — maps `DomainType` to domain-specific card layouts (sport score, finance ticker, politics vote bar, law verdict, entertainment rank, tech benchmark). Falls back to generic key-value card. |
+| `complaint_card.dart` | Reusable complaint list item: title, category badge, location tag, description preview (3-line), media thumbnail strip, up/down vote buttons with optimistic update, comment count, status badge. |
+| `vote_box_card.dart` | Reusable poll card: title, description, visibility badge, vote count, real-time countdown timer (`Timer`), expired "Closed" badge. |
+| `embeddable_vote_box.dart` | Standalone embeddable poll widget (usable inside other screens): fetches its own data, shows voting or results inline, uses `votingHubProvider` for casting. |
+| `rich_text_content.dart` | Markdown-aware text renderer for complaint descriptions. |
+
+---
+
+## 3. Navigation & Routing Architecture
+
+ResultHub uses **go_router 16 with `StatefulShellRoute.indexedStack`** to maintain independent navigation stacks per tab.
+
+### Bottom Navigation Tabs
+
+| Index | Tab | Root Path | Screen |
+|---|---|---|---|
+| 0 | Results | `/` | `HomeScreen` |
+| 1 | Complaints | `/complaints` | `ComplaintFeedScreen` |
+| 2 | Voting | `/votes` | `VotingHubScreen` |
+| 3 | Profile | `/profile` | `ProfileScreen` |
+
+### Deep Links (Root Navigator — preserves back stack)
+
+| Path | Destination |
+|---|---|
+| `/splash` | `SplashScreen` |
+| `/onboarding` | `OnboardingScreen` |
+| `/login` | `LoginScreen` |
+| `/signup` | `SignupScreen` |
+| `/w/:slug?code=` | `WorkspaceResolverScreen` (slug + optional unlock code) |
+| `/workspace/:id?name=` | `LocalWorkspaceScreen` |
+| `/complaints/:id` | `ComplaintDetailScreen` |
+| `/votes/:id` | `VoteBoxDetailScreen` |
+
+### Badge System
+`BadgeNotifier` tracks:
+- **Complaints**: Counts new complaints since last visit (timestamp stored in `FlutterSecureStorage`). Cleared when Complaints tab is selected.
+- **Voting**: Active polls indicator (`hasActivePolls` boolean). Shown as dot badge on Voting tab.
+
+---
+
+## 4. Database Architecture & Migrations
+
+### 4.1 Relational-Document Layout
+
+- **Generic JSONB Engine**: `dataset_records.data` stores arbitrary JSON, indexed via GIN.
+- **Full-Text Search**: `search_vector` (`tsvector`) is auto-updated by a PostgreSQL trigger on INSERT/UPDATE of workspaces, datasets, and records.
+- **GIN Wildcard Index**: Registered over `search_vector` for instant prefix matches.
+- **Optimistic Locking**: `dataset_records` includes a `@Version` column; concurrent record edits resolve via `ObjectOptimisticLockingFailureException` (→ HTTP 409) without database-level locks.
+- **Declarative Partitioning**: `analytics_events` partitioned by month on `created_at`.
+- **Transactional Outbox**: `write_outbox_events` guarantees event delivery atomically within the same transaction as the business write.
+
+### 4.2 Flyway Migrations Catalog
+
+| Migration | Description |
+|---|---|
+| `V1__init_users_table.sql` | `users` table with credentials and roles. |
+| `V2__init_workspace_tables.sql` | `workspaces`, `workspace_members`, `workspace_invitations`, visibility enums. |
+| `V3__init_dataset_tables.sql` | `datasets`, `dataset_schemas`, `dataset_records` (JSONB). |
+| `V4__init_csv_import_tables.sql` | `import_jobs`, `uploaded_files`. |
+| `V5__init_search_and_analytics.sql` | `search_vector` column, GIN index, FTS trigger, `search_analytics`. |
+| `V6__init_analytics_tables.sql` | Partitioned `analytics_events` table. |
+| `V7__create_complaints_schema.sql` | `complaints`, `complaint_votes`, `complaint_comments`. |
+| `V8__create_voting_schema.sql` | `vote_boxes`, `vote_options`, `vote_responses`. |
+| `V9__add_version_to_dataset_records.sql` | Adds `version` column to `dataset_records` for optimistic locking. |
+| `V10__create_write_outbox.sql` | `write_outbox_events` table for Transactional Outbox pattern. |
+
+---
+
+## 5. Security Architecture
+
+### 5.1 Authentication & Authorization
+- **JWT**: Short-lived access tokens (1-day) + refresh tokens (7-day). Refresh rotates on use.
+- **RBAC**: System-level `ADMIN` / `USER` roles. Workspace-level `OWNER` / `ADMIN` / `EDITOR` / `VIEWER` roles.
+- **Google OAuth2**: Integrated via Spring Security + Firebase Auth on the Flutter side.
+- **CORS**: Restricted to configured staging/production origins.
+
+### 5.2 Workspace Visibility Gates
+| Mode | Access Rule |
+|---|---|
+| `PUBLIC` | Open to all; no token required. |
+| `PASSWORD_PROTECTED` | Requires `Authorization: Workspace <token>` header; token obtained via `/unlock` endpoint. |
+| `PRIVATE` | Requires JWT + verified workspace membership. |
+
+### 5.3 Bucket4j Rate Limiting
+- 100 requests/minute per IP (public endpoints).
+- Authenticated `ADMIN` users bypass throttling.
+- Violations → HTTP 429 via `RateLimitExceededException`.
+
+### 5.4 Anti-Spam Voting
+- **Authenticated users**: Checked against `vote_responses` by `voterId`.
+- **Anonymous users**: Checked by IP address + device fingerprint within 24-hour window.
+- **Expired polls**: Return HTTP 410 Gone.
+
+### 5.5 Error Sanitization
+- All exceptions handled by `GlobalExceptionHandler`.
+- Zero stack trace leakage to clients in production.
+- Generic HTTP status codes with clean JSON responses.
+
+---
+
+## 6. Flutter Dependencies (`pubspec.yaml`)
+
+| Package | Version | Purpose |
+|---|---|---|
+| `flutter_riverpod` | ^3.3.1 | State management (Notifier / AsyncNotifier) |
+| `dio` | ^5.9.0 | HTTP client with interceptors |
+| `go_router` | ^16.0.0 | Declarative routing + `StatefulShellRoute` |
+| `flutter_secure_storage` | ^10.0.0-beta | JWT + workspace token persistence |
+| `google_fonts` | ^8.1.0 | Inter font family |
+| `shared_preferences` | ^2.5.5 | Bookmarks and user preferences |
+| `file_picker` | ^10.3.2 | CSV and file selection |
+| `share_plus` | 12.0.2 | Native share sheet |
+| `screenshot` | ^3.0.0 | Result card screenshot capture |
+| `url_launcher` | ^6.3.2 | External link opening |
+| `firebase_core` | ^4.9.0 | Firebase initialization |
+| `firebase_auth` | ^6.5.1 | Firebase authentication |
+| `google_sign_in` | ^7.2.0 | Google OAuth (v7 API) |
+| `path_provider` | ^2.1.5 | Local filesystem paths |
+| `flutter_map` | ^8.3.0 | OpenStreetMap location picker |
+| `latlong2` | ^0.9.1 | Geo coordinates |
+| `geolocator` | ^14.0.2 | Device GPS |
+| `video_player` | ^2.11.1 | Media playback for complaint attachments |
+| `device_info_plus` | ^12.4.0 | Device fingerprint for anti-spam voting |
+| `crypto` | ^3.0.7 | MD5 fingerprint hashing |
+| `carousel_slider` | ^5.1.2 | Image carousel for complaint media |
+| `marquee` | ^2.3.0 | Scrolling ticker text |
+
+---
+
+## 7. Staging & SRE Testing Protocols
+
+### 7.1 Testcontainers Integration Tests
+- Dockerized **PostgreSQL 16** spun up per JVM lifecycle (Singleton container pattern).
+- Tests cover: Flyway migrations, FTS triggers, JSONB validation, partitioning, CSV batch imports, complaint/voting flows.
+
+### 7.2 CI/CD Pipeline
+- **GitHub Actions**: Compile + Testcontainer validation on every push to `main`.
+- **Docker Build**: Multi-stage Alpine image for the Spring Boot JAR.
+- **Flutter Web**: Static bundle deployed to CDN for public edge delivery.
+- **Git Remotes**: Dual-push configured — `origin` (Faiz-7716/ResultPublisher) and `company` (BTC-2025/RESULT-M).
+
+---
+
+## 8. API Surface Summary
+
+| Category | Endpoints |
+|---|---|
+| **Auth** | `POST /register`, `POST /login`, `POST /logout`, `POST /refresh` |
+| **Workspace** | `GET/POST/PUT/DELETE /workspaces`, `POST /workspaces/{id}/unlock`, `GET /workspaces/slug/:slug` |
+| **Members** | `POST /workspaces/{id}/invite`, `GET/PATCH /workspaces/{id}/members` |
+| **Dataset** | `GET/POST/PUT/DELETE /datasets/{id}`, `POST /datasets/{id}/publish`, `POST /datasets/{id}/archive` |
+| **Records** | `GET/POST/PUT/PATCH /datasets/{id}/records`, `GET /datasets/{id}/records/{recordId}` |
+| **CSV Import** | `POST /csv/upload`, `GET /csv/import-jobs/{id}` |
+| **PDF Import** | `POST /pdf/import` |
+| **Search** | `GET /search?q=&type=&page=`, `GET /search/suggestions` |
+| **Analytics** | `GET /analytics/workspace/{id}`, `GET /analytics/global` |
+| **Complaints** | `GET/POST /complaints`, `GET /complaints/{id}`, `POST /complaints/{id}/vote`, `POST /complaints/{id}/comments`, `PATCH /complaints/{id}/status`, `POST /complaints/{id}/flag` |
+| **Voting** | `GET/POST /votes`, `GET /votes/{id}`, `POST /votes/{id}/cast`, `GET /votes/{id}/results`, `POST /votes/{id}/unlock` |

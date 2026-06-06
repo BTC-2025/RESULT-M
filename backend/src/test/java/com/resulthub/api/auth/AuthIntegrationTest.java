@@ -40,5 +40,16 @@ public class AuthIntegrationTest extends BaseContainerTest {
         ResponseEntity<Map> loginResponse = restTemplate.postForEntity("/api/v1/auth/login", loginRequest, Map.class);
         
         assertThat(loginResponse.getStatusCode()).isNotNull();
+        assertThat(loginResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(loginResponse.getBody()).containsKeys("accessToken", "refreshToken");
+
+        Map<String, String> refreshRequest = Map.of(
+                "refreshToken", loginResponse.getBody().get("refreshToken").toString()
+        );
+
+        ResponseEntity<Map> refreshResponse = restTemplate.postForEntity("/api/v1/auth/refresh", refreshRequest, Map.class);
+
+        assertThat(refreshResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(refreshResponse.getBody()).containsKeys("accessToken", "refreshToken", "userId");
     }
 }

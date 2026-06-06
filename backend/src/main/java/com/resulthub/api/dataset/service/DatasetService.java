@@ -11,8 +11,10 @@ import com.resulthub.api.workspace.entity.WorkspaceMember;
 import com.resulthub.api.workspace.enums.WorkspaceRole;
 import com.resulthub.api.workspace.repository.WorkspaceMemberRepository;
 import com.resulthub.api.workspace.repository.WorkspaceRepository;
+import com.resulthub.api.workspace.service.WorkspaceAccessService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -29,8 +31,10 @@ public class DatasetService {
     private final DatasetRepository datasetRepository;
     private final WorkspaceRepository workspaceRepository;
     private final WorkspaceMemberRepository memberRepository;
+    private final WorkspaceAccessService workspaceAccessService;
 
     @Transactional
+    @CacheEvict(value = "publicWorkspaces", allEntries = true)
     public DatasetResponse createDataset(UUID workspaceId, DatasetRequest request, User user) {
         Workspace workspace = workspaceRepository.findByIdAndNotDeleted(workspaceId)
                 .orElseThrow(() -> new RuntimeException("Workspace not found"));
@@ -52,19 +56,25 @@ public class DatasetService {
         return mapToResponse(dataset);
     }
 
-    public Page<DatasetResponse> getDatasetsByWorkspace(UUID workspaceId, Pageable pageable) {
-        // Assume workspace visibility check is done at the controller layer or a facade
+    @Transactional(readOnly = true)
+    public Page<DatasetResponse> getDatasetsByWorkspace(UUID workspaceId, Pageable pageable, User user, String authHeader) {
+        Workspace workspace = workspaceRepository.findByIdAndNotDeleted(workspaceId)
+                .orElseThrow(() -> new RuntimeException("Workspace not found"));
+        workspaceAccessService.validateCanView(workspace, user, authHeader);
         return datasetRepository.findByWorkspaceIdAndNotDeleted(workspaceId, pageable)
                 .map(this::mapToResponse);
     }
 
-    public DatasetResponse getDataset(UUID id) {
+    @Transactional(readOnly = true)
+    public DatasetResponse getDataset(UUID id, User user, String authHeader) {
         Dataset dataset = datasetRepository.findByIdAndNotDeleted(id)
                 .orElseThrow(() -> new RuntimeException("Dataset not found"));
+        workspaceAccessService.validateCanView(dataset.getWorkspace(), user, authHeader);
         return mapToResponse(dataset);
     }
 
     @Transactional
+    @CacheEvict(value = "publicWorkspaces", allEntries = true)
     public DatasetResponse updateDataset(UUID id, DatasetRequest request, User user) {
         Dataset dataset = datasetRepository.findByIdAndNotDeleted(id)
                 .orElseThrow(() -> new RuntimeException("Dataset not found"));
@@ -83,6 +93,7 @@ public class DatasetService {
     }
 
     @Transactional
+    @CacheEvict(value = "publicWorkspaces", allEntries = true)
     public void publishDataset(UUID id, User user) {
         Dataset dataset = datasetRepository.findByIdAndNotDeleted(id)
                 .orElseThrow(() -> new RuntimeException("Dataset not found"));
@@ -94,6 +105,7 @@ public class DatasetService {
     }
 
     @Transactional
+    @CacheEvict(value = "publicWorkspaces", allEntries = true)
     public void archiveDataset(UUID id, User user) {
         Dataset dataset = datasetRepository.findByIdAndNotDeleted(id)
                 .orElseThrow(() -> new RuntimeException("Dataset not found"));
@@ -105,6 +117,7 @@ public class DatasetService {
     }
 
     @Transactional
+    @CacheEvict(value = "publicWorkspaces", allEntries = true)
     public void deleteDataset(UUID id, User user) {
         Dataset dataset = datasetRepository.findByIdAndNotDeleted(id)
                 .orElseThrow(() -> new RuntimeException("Dataset not found"));

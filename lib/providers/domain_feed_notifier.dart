@@ -21,112 +21,125 @@ class DomainFeedItem {
   });
 }
 
-class DomainFeedNotifier extends StateNotifier<AsyncValue<List<DomainFeedItem>>> {
-  final ApiService _apiService;
+class DomainFeedNotifier extends AsyncNotifier<List<DomainFeedItem>> {
+  late ApiService _apiService;
   final DomainType _domainType;
   Timer? _pollingTimer;
 
-  DomainFeedNotifier(this._apiService, this._domainType) : super(const AsyncValue.loading()) {
-    _fetchFeed();
-    if (_domainType == DomainType.sport || _domainType == DomainType.politics) {
-      _startPolling();
-    }
-  }
-
-  void _startPolling() {
-    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
-      _refreshSilent();
-    });
-  }
+  DomainFeedNotifier(this._domainType);
 
   @override
-  void dispose() {
-    _pollingTimer?.cancel();
-    super.dispose();
-  }
+  Future<List<DomainFeedItem>> build() async {
+    _apiService = ref.watch(apiServiceProvider);
 
-  Future<void> _fetchFeed() async {
-    try {
-      state = const AsyncValue.loading();
-      final feedItems = await _loadData();
-      if (mounted) {
-        state = AsyncValue.data(feedItems);
-      }
-    } catch (e, stack) {
-      if (mounted) {
-        state = AsyncValue.error(e, stack);
-      }
+    ref.onDispose(() {
+      _pollingTimer?.cancel();
+    });
+
+    if (_domainType == DomainType.sport || _domainType == DomainType.politics) {
+      _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+        _refreshSilent();
+      });
     }
+
+    return _loadData();
   }
 
   Future<void> _refreshSilent() async {
     try {
       final feedItems = await _loadData();
-      if (mounted) {
-        state = AsyncValue.data(feedItems);
-      }
+      state = AsyncData(feedItems);
     } catch (e) {
       // Ignore errors on silent refresh to avoid disrupting UI
     }
   }
 
   Future<void> refresh() async {
-    await _fetchFeed();
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() => _loadData());
   }
 
   Future<List<DomainFeedItem>> _loadData() async {
-    // 1. Fetch workspaces by domain
-    final String domainName = _domainType.name.toUpperCase();
+    final String domainName = backendDomainTypeFor(_domainType) ?? 'CUSTOM';
     final workspaces = await _apiService.fetchWorkspacesByDomain(domainName);
-    
-    List<DomainFeedItem> feedItems = [];
 
-    // 2. Fetch datasets and records for each workspace
-    for (var workspace in workspaces) {
-      final workspaceId = workspace['id'] as String;
-      final workspaceName = workspace['name'] as String;
+    return workspaces
+        .whereType<Map<String, dynamic>>()
+        .map(_workspaceFeedItem)
+        .toList();
+  }
 
-      try {
-        final datasets = await _apiService.fetchPublishedDatasets(workspaceId);
-        
-        // Filter out DRAFT and ARCHIVED just to be safe
-        final publishedDatasets = datasets.where((d) => d['status'] == 'PUBLISHED').toList();
-        
-        if (publishedDatasets.isNotEmpty) {
-          // Take the first published dataset
-          final firstDataset = publishedDatasets.first;
-          final datasetId = firstDataset['id'] as String;
-          final datasetName = firstDataset['name'] as String;
+  DomainFeedItem _workspaceFeedItem(Map<String, dynamic> workspace) {
+    final workspaceId = workspace['id']?.toString() ?? '';
+    final workspaceName = workspace['name']?.toString() ?? 'Result workspace';
 
-          // Fetch records for this dataset
-          final recordsData = await _apiService.fetchDatasetRecords(datasetId, page: 0, size: 20);
-          
-          List<Map<String, dynamic>> parsedRecords = [];
-          for (var r in recordsData) {
-            if (r['data'] != null) {
-              parsedRecords.add(r['data'] as Map<String, dynamic>);
-            }
-          }
+    return DomainFeedItem(
+      workspaceId: workspaceId,
+      workspaceName: workspaceName,
+      datasetId: '${workspaceId}_summary',
+      datasetName: workspaceName,
+      domainType: _domainType,
+      records: [_summaryRecord(workspaceName, workspace['description']?.toString())],
+    );
+  }
 
-          feedItems.add(DomainFeedItem(
-            workspaceId: workspaceId,
-            workspaceName: workspaceName,
-            datasetId: datasetId,
-            datasetName: datasetName,
-            domainType: _domainType,
-            records: parsedRecords,
-          ));
-        }
-      } catch (e) {
-        // Skip workspace if error fetching its datasets (don't fail entire feed)
-      }
+  Map<String, dynamic> _summaryRecord(String title, String? description) {
+    final subtitle = description?.trim().isNotEmpty == true
+        ? description!.trim()
+        : 'Open this workspace to view published result data.';
+
+    switch (_domainType) {
+      case DomainType.sport:
+        return {
+          'team1': title,
+          'score1': 'Live',
+          'status': subtitle,
+        };
+      case DomainType.politics:
+        return {
+          'candidate': title,
+          'party': subtitle,
+          'votes': 'Live',
+          'percentage': '0',
+        };
+      case DomainType.finance:
+        return {
+          'symbol': title,
+          'name': subtitle,
+          'price': 'Live',
+          'change': '+0%',
+        };
+      case DomainType.entertainment:
+        return {
+          'title': title,
+          'metric': 'Live',
+        };
+      case DomainType.tech:
+        return {
+          'productName': title,
+          'score': 'Live',
+        };
+      case DomainType.law:
+        return {
+          'caseTitle': title,
+          'court': subtitle,
+          'verdict': 'Open',
+        };
+      case DomainType.academic:
+      case DomainType.government:
+      case DomainType.hyperLocal:
+        return {
+          'title': title,
+          'details': subtitle,
+          'status': 'Published',
+        };
     }
-
-    return feedItems;
   }
 }
 
-final domainFeedProvider = StateNotifierProvider.family<DomainFeedNotifier, AsyncValue<List<DomainFeedItem>>, DomainType>((ref, domainType) {
-  final apiService = ref.watch(apiServiceProvider);
-  return DomainFeedNotifier(apiService, domainType);
-});
+final domainFeedProvider =
+    AsyncNotifierProvider.family<
+      DomainFeedNotifier,
+      List<DomainFeedItem>,
+      DomainType
+    >(DomainFeedNotifier.new);

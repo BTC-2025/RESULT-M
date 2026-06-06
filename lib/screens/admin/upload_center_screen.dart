@@ -1,8 +1,12 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert';
-import 'package:path_provider/path_provider.dart';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+
+import '../../models/domain_model.dart';
 import '../../services/api_service.dart';
 
 class UploadCenterScreen extends ConsumerStatefulWidget {
@@ -13,139 +17,294 @@ class UploadCenterScreen extends ConsumerStatefulWidget {
 }
 
 class _UploadCenterScreenState extends ConsumerState<UploadCenterScreen> {
+  final List<String> _domains = const [
+    'University Exams',
+    'School Boards',
+    'Govt Tenders',
+    'Corporate Hackathon',
+    'Local Sports',
+  ];
+
+  String _selectedDomain = 'University Exams';
+  String _selectedFileType = 'CSV';
+  String? _selectedWorkspaceId;
+  String? _selectedDatasetId;
   String? _selectedFileName;
+  List<int>? _selectedFileBytes;
+  List<String> _csvHeaders = [];
+  List<Map<String, String>> _csvPreviewRows = [];
+  String? _recordKeyColumn;
+  String? _csvPreviewError;
+  List<dynamic> _workspaces = [];
+  List<dynamic> _datasets = [];
+  bool _isLoadingTargets = true;
   bool _isUploading = false;
   bool _isUploaded = false;
-  final TextEditingController _fileNameController = TextEditingController();
-  String _selectedDomain = 'University Exams';
-  final List<String> _domains = ['University Exams', 'School Boards', 'Govt Tenders', 'Corporate Hackathon', 'Local Sports'];
-  String _selectedFileType = 'CSV / XLSX';
 
   @override
-  void dispose() {
-    _fileNameController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadWorkspaces();
   }
 
-  void _showFileNameDialog() {
-    _fileNameController.clear();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Enter File Name', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter the file name you want to upload:', style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _fileNameController,
-              decoration: InputDecoration(
-                hintText: _selectedFileType == 'PDF' ? 'e.g. results_sem4.pdf' : 'e.g. results_sem4.csv',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                prefixIcon: const Icon(Icons.description),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () {
-              if (_fileNameController.text.trim().isNotEmpty) {
-                setState(() {
-                  _selectedFileName = _fileNameController.text.trim();
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Select', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
+  Future<void> _loadWorkspaces() async {
+    try {
+      final workspaces = await ref.read(apiServiceProvider).fetchMyWorkspaces();
+      if (!mounted) return;
+      setState(() {
+        _workspaces = workspaces;
+        _selectedWorkspaceId = workspaces.isNotEmpty
+            ? workspaces.first['id'].toString()
+            : null;
+        _isLoadingTargets = false;
+      });
+      if (_selectedWorkspaceId != null) {
+        await _loadDatasets(_selectedWorkspaceId!);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingTargets = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load workspaces: $e')));
+    }
+  }
+
+  Future<void> _loadDatasets(String workspaceId) async {
+    final datasets = await ref
+        .read(apiServiceProvider)
+        .fetchDatasets(workspaceId);
+    if (!mounted) return;
+    setState(() {
+      _datasets = datasets;
+      _selectedDatasetId = datasets.isNotEmpty
+          ? datasets.first['id'].toString()
+          : null;
+    });
+  }
+
+  Future<String> _ensureDataset() async {
+    if (_selectedDatasetId != null) return _selectedDatasetId!;
+    if (_selectedWorkspaceId == null) {
+      throw Exception('Create or select a workspace before uploading.');
+    }
+
+    final name = _selectedDomain.trim().isEmpty
+        ? 'Uploaded Results'
+        : _selectedDomain;
+    final slug =
+        '${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-')}-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    final dataset = await ref
+        .read(apiServiceProvider)
+        .createDataset(_selectedWorkspaceId!, {
+          'name': name,
+          'slug': slug,
+          'description': 'Uploaded via admin console',
+          'domainType': _backendDomainForUploadCategory(_selectedDomain),
+        });
+    await _loadDatasets(_selectedWorkspaceId!);
+    return dataset['id'].toString();
+  }
+
+  String _backendDomainForUploadCategory(String category) {
+    final normalized = category.toLowerCase();
+    if (normalized.contains('university') || normalized.contains('school')) {
+      return backendDomainTypeFor(DomainType.academic)!;
+    }
+    if (normalized.contains('sport')) {
+      return backendDomainTypeFor(DomainType.sport)!;
+    }
+    if (normalized.contains('hackathon')) {
+      return backendDomainTypeFor(DomainType.tech)!;
+    }
+    return backendDomainTypeFor(DomainType.hyperLocal)!;
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: _selectedFileType == 'PDF' ? ['pdf'] : ['csv'],
+      withData: true,
     );
+    if (result == null || result.files.isEmpty) return;
+
+    final picked = result.files.single;
+    List<int>? bytes = picked.bytes;
+    if (bytes == null && picked.path != null) {
+      bytes = await File(picked.path!).readAsBytes();
+    }
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not read the selected file')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _selectedFileName = picked.name;
+      _selectedFileBytes = bytes;
+      _isUploaded = false;
+      _csvHeaders = [];
+      _csvPreviewRows = [];
+      _recordKeyColumn = null;
+      _csvPreviewError = null;
+    });
+
+    if (_selectedFileType == 'CSV') {
+      _buildCsvPreview(bytes);
+    }
   }
 
   Future<void> _uploadData() async {
-    if (_selectedFileName == null) return;
+    if (_selectedFileName == null || _selectedFileBytes == null) return;
 
     setState(() => _isUploading = true);
-    
-    // Simulate reading a real file by creating dummy bytes
-    List<int> fileBytes = _selectedFileType == 'PDF' ? utf8.encode("Dummy PDF Data") : utf8.encode("Roll Number,Student Name\n12345,John Doe");
-
-    // Call the Spring Boot backend
     final apiService = ref.read(apiServiceProvider);
-    
-    // Dummy UUID matching Postgres for prototyping
-    String dummyDatasetId = "00000000-0000-0000-0000-000000000000"; 
-    
-    if (_selectedFileType == 'PDF') {
-      String? jobId = await apiService.uploadPdf(dummyDatasetId, _selectedFileName!, fileBytes);
-      if (jobId != null) {
-        // Poll for status
-        bool isCompleted = false;
-        bool isFailed = false;
-        while (!isCompleted && !isFailed) {
+
+    try {
+      final datasetId = await _ensureDataset();
+      if (_selectedFileType == 'PDF') {
+        final jobId = await apiService.uploadPdf(
+          datasetId,
+          _selectedFileName!,
+          _selectedFileBytes!,
+        );
+        if (jobId == null) {
+          throw Exception('PDF upload failed');
+        }
+
+        var completed = false;
+        var failed = false;
+        while (!completed && !failed) {
           await Future.delayed(const Duration(seconds: 3));
           final statusMap = await apiService.checkPdfImportJob(jobId);
-          if (statusMap != null) {
-            String status = statusMap['status'];
-            if (status == 'COMPLETED') {
-              isCompleted = true;
-            } else if (status == 'FAILED') {
-              isFailed = true;
-            }
-          } else {
-            // Simulated fallback
-            isCompleted = true;
-          }
+          final status = statusMap?['status']?.toString();
+          completed = status == 'COMPLETED';
+          failed = status == 'FAILED';
         }
-        
+
         if (!mounted) return;
         setState(() {
           _isUploading = false;
-          _isUploaded = !isFailed;
+          _isUploaded = completed;
         });
-
-        if (isFailed) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF parsing failed. Make sure your PDF contains a results table.'), backgroundColor: Colors.red));
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF parsed and uploaded successfully!'), backgroundColor: Colors.green));
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              completed
+                  ? 'PDF parsed and uploaded successfully!'
+                  : 'PDF parsing failed.',
+            ),
+            backgroundColor: completed ? Colors.green : Colors.red,
+          ),
+        );
       } else {
-        // Simulated upload (Backend Unreachable)
+        final success = await apiService.uploadCsv(
+          datasetId,
+          _selectedFileName!,
+          _selectedFileBytes!,
+          recordKeyColumn: _recordKeyColumn,
+        );
         if (!mounted) return;
         setState(() {
           _isUploading = false;
-          _isUploaded = true;
+          _isUploaded = success;
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Simulated Upload (Backend Unreachable)'), backgroundColor: Colors.orange));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success
+                  ? 'Results uploaded and processed successfully!'
+                  : 'Upload failed. Check file format and permissions.',
+            ),
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
       }
-    } else {
-      bool success = await apiService.uploadCsv(dummyDatasetId, _selectedFileName!, fileBytes);
-
+    } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isUploading = false;
-        _isUploaded = success || true; // Fallback to true
-      });
-
+      setState(() => _isUploading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? 'Results uploaded and processed successfully via API!' : 'Simulated Upload (Backend Unreachable)'),
-          backgroundColor: success ? Colors.green : Colors.orange,
+          content: Text('Upload failed: $e'),
+          backgroundColor: Colors.red,
         ),
       );
     }
+  }
+
+  void _buildCsvPreview(List<int> bytes) {
+    try {
+      final csvText = utf8.decode(bytes);
+      final lines = const LineSplitter()
+          .convert(csvText)
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+      if (lines.isEmpty) {
+        throw Exception('CSV file is empty.');
+      }
+
+      final headers = _parseCsvLine(lines.first);
+      if (headers.isEmpty) {
+        throw Exception('CSV header row is missing.');
+      }
+
+      final previewRows = <Map<String, String>>[];
+      for (final line in lines.skip(1).take(5)) {
+        final values = _parseCsvLine(line);
+        final row = <String, String>{};
+        for (var i = 0; i < headers.length; i++) {
+          row[headers[i]] = i < values.length ? values[i] : '';
+        }
+        previewRows.add(row);
+      }
+
+      setState(() {
+        _csvHeaders = headers;
+        _csvPreviewRows = previewRows;
+        _recordKeyColumn = _suggestRecordKeyColumn(headers);
+      });
+    } catch (e) {
+      setState(() => _csvPreviewError = e.toString());
+    }
+  }
+
+  List<String> _parseCsvLine(String line) {
+    final values = <String>[];
+    final buffer = StringBuffer();
+    var inQuotes = false;
+
+    for (var i = 0; i < line.length; i++) {
+      final char = line[i];
+      final nextChar = i + 1 < line.length ? line[i + 1] : null;
+
+      if (char == '"' && inQuotes && nextChar == '"') {
+        buffer.write('"');
+        i++;
+      } else if (char == '"') {
+        inQuotes = !inQuotes;
+      } else if (char == ',' && !inQuotes) {
+        values.add(buffer.toString().trim());
+        buffer.clear();
+      } else {
+        buffer.write(char);
+      }
+    }
+
+    values.add(buffer.toString().trim());
+    return values;
+  }
+
+  String? _suggestRecordKeyColumn(List<String> headers) {
+    final normalized = {
+      for (final header in headers) header.toLowerCase(): header,
+    };
+    for (final candidate in ['recordkey', 'rollnumber', 'id', 'studentid']) {
+      if (normalized.containsKey(candidate)) return normalized[candidate];
+    }
+    return headers.isNotEmpty ? headers.first : null;
   }
 
   Future<void> _downloadSampleCsv() async {
@@ -154,24 +313,41 @@ class _UploadCenterScreenState extends ConsumerState<UploadCenterScreen> {
       final path = '${dir.path}/resulthub_template.csv';
       final file = File(path);
       await file.writeAsString(
-          "Roll Number,Student Name,Subject 1,Subject 2,Total Marks\n12345,John Doe,85,90,175\n12346,Jane Smith,92,88,180");
+        'rollNumber,name,score\n1001,John Doe,95.5\n1002,Jane Smith,88.0',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Template saved to $path'), backgroundColor: Colors.green));
-    } catch (e) {
+        SnackBar(
+          content: Text('Template saved to $path'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save template'), backgroundColor: Colors.red));
+        const SnackBar(
+          content: Text('Failed to save template'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final canUpload =
+        !_isUploading &&
+        _selectedWorkspaceId != null &&
+        _selectedFileName != null &&
+        _selectedFileBytes != null;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text('UPLOAD DATA',
-            style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
-        centerTitle: false,
+        title: const Text(
+          'UPLOAD DATA',
+          style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF0F172A),
         elevation: 0,
@@ -182,185 +358,171 @@ class _UploadCenterScreenState extends ConsumerState<UploadCenterScreen> {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.grey.shade300, width: 2),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade300),
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8F9FA),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedDomain,
-                        isExpanded: true,
-                        items: _domains.map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
-                        onChanged: (val) => setState(() => _selectedDomain = val!),
+                  if (_isLoadingTargets)
+                    const LinearProgressIndicator()
+                  else if (_workspaces.isEmpty)
+                    const Text(
+                      'Create a workspace before uploading results.',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    )
+                  else ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedWorkspaceId,
+                      decoration: InputDecoration(
+                        labelText: 'Workspace',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                        shape: BoxShape.circle),
-                    child: const Icon(Icons.cloud_upload,
-                        size: 48, color: Color(0xFF10B981)),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ChoiceChip(
-                        label: const Text('CSV / XLSX'),
-                        selected: _selectedFileType == 'CSV / XLSX',
-                        onSelected: (bool selected) {
-                          if (selected) setState(() => _selectedFileType = 'CSV / XLSX');
-                        },
-                      ),
-                      const SizedBox(width: 16),
-                      ChoiceChip(
-                        label: const Text('PDF'),
-                        selected: _selectedFileType == 'PDF',
-                        onSelected: (bool selected) {
-                          if (selected) setState(() => _selectedFileType = 'PDF');
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Select $_selectedFileType File',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 20,
-                          color: Color(0xFF0F172A))),
-                  const SizedBox(height: 8),
-                  const Text('Tap the button below to specify your file',
-                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 32),
-                  if (_selectedFileName != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                          color: const Color(0xFFF3F4F6),
-                          borderRadius: BorderRadius.circular(8)),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.description, color: Color(0xFF0F172A)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                              child: Text(_selectedFileName!,
-                                  style: const TextStyle(fontWeight: FontWeight.bold))),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.grey),
-                            onPressed: () => setState(() => _selectedFileName = null),
-                          )
-                        ],
-                      ),
+                      items: _workspaces.map((workspace) {
+                        return DropdownMenuItem(
+                          value: workspace['id'].toString(),
+                          child: Text(
+                            workspace['name']?.toString() ?? 'Workspace',
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        setState(() {
+                          _selectedWorkspaceId = value;
+                          _selectedDatasetId = null;
+                          _datasets = [];
+                        });
+                        await _loadDatasets(value);
+                      },
                     ),
                     const SizedBox(height: 16),
-                  ],
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _isUploading
-                          ? null
-                          : (_selectedFileName == null
-                              ? _showFileNameDialog
-                              : _uploadData),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F172A),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedDatasetId,
+                      decoration: InputDecoration(
+                        labelText: 'Dataset',
+                        hintText: 'A dataset will be created if none exists',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      child: _isUploading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
-                          : Text(
-                              _selectedFileName == null
-                                  ? 'SELECT FILE'
-                                  : 'UPLOAD RESULTS',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1)),
+                      items: _datasets.map((dataset) {
+                        return DropdownMenuItem(
+                          value: dataset['id'].toString(),
+                          child: Text(dataset['name']?.toString() ?? 'Dataset'),
+                        );
+                      }).toList(),
+                      onChanged: (value) =>
+                          setState(() => _selectedDatasetId = value),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedDomain,
+                    decoration: InputDecoration(
+                      labelText: 'Result Type',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    items: _domains
+                        .map(
+                          (domain) => DropdownMenuItem(
+                            value: domain,
+                            child: Text(domain),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _selectedDomain = value!),
+                  ),
+                  const SizedBox(height: 20),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'CSV', label: Text('CSV')),
+                      ButtonSegment(value: 'PDF', label: Text('PDF')),
+                    ],
+                    selected: {_selectedFileType},
+                    onSelectionChanged: (selection) {
+                      setState(() {
+                        _selectedFileType = selection.first;
+                        _selectedFileName = null;
+                        _selectedFileBytes = null;
+                        _isUploaded = false;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 20),
+                  OutlinedButton.icon(
+                    onPressed: _isUploading ? null : _pickFile,
+                    icon: const Icon(Icons.attach_file),
+                    label: Text(
+                      _selectedFileName ?? 'Select $_selectedFileType File',
+                    ),
+                  ),
+                  if (_selectedFileType == 'CSV' &&
+                      (_csvHeaders.isNotEmpty || _csvPreviewError != null)) ...[
+                    const SizedBox(height: 16),
+                    _buildCsvPreviewPanel(),
+                  ],
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: canUpload ? _uploadData : null,
+                    icon: _isUploading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cloud_upload),
+                    label: Text(
+                      _isUploading ? 'Uploading...' : 'Upload Results',
                     ),
                   ),
                   if (_isUploaded) ...[
-                    const SizedBox(height: 32),
-                    const Text('DATA PREVIEW (First 3 rows)', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: Colors.grey)),
-                    const SizedBox(height: 12),
-                    Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Table(
-                        border: TableBorder.symmetric(inside: BorderSide(color: Colors.grey.shade200)),
-                        children: const [
-                          TableRow(decoration: BoxDecoration(color: Color(0xFFF3F4F6)), children: [
-                            Padding(padding: EdgeInsets.all(8.0), child: Text('ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                            Padding(padding: EdgeInsets.all(8.0), child: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                            Padding(padding: EdgeInsets.all(8.0), child: Text('Score', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                          ]),
-                          TableRow(children: [
-                            Padding(padding: EdgeInsets.all(8.0), child: Text('101', style: TextStyle(fontSize: 12))),
-                            Padding(padding: EdgeInsets.all(8.0), child: Text('John Doe', style: TextStyle(fontSize: 12))),
-                            Padding(padding: EdgeInsets.all(8.0), child: Text('85', style: TextStyle(fontSize: 12))),
-                          ]),
-                          TableRow(children: [
-                            Padding(padding: EdgeInsets.all(8.0), child: Text('102', style: TextStyle(fontSize: 12))),
-                            Padding(padding: EdgeInsets.all(8.0), child: Text('Jane Smith', style: TextStyle(fontSize: 12))),
-                            Padding(padding: EdgeInsets.all(8.0), child: Text('92', style: TextStyle(fontSize: 12))),
-                          ]),
-                        ],
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Upload completed. Records are now available in the selected dataset.',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200)),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('CSV Format Requirements',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                  const SizedBox(height: 16),
-                  _buildRequirement(
-                      'Roll Number (Required)', 'Must be unique identifier'),
-                  _buildRequirement('Student Name', 'Full legal name'),
-                  _buildRequirement(
-                      'Marks / Grades', 'Dynamic columns based on subjects'),
-                  const SizedBox(height: 16),
+                  const Text(
+                    'CSV Format Requirements',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Include a unique rollNumber/record key and dynamic score columns.',
+                  ),
+                  const SizedBox(height: 12),
                   TextButton.icon(
                     onPressed: _downloadSampleCsv,
-                    icon: const Icon(Icons.download, color: Color(0xFF3B82F6)),
-                    label: const Text('Download Sample CSV Template',
-                        style: TextStyle(
-                            color: Color(0xFF3B82F6),
-                            fontWeight: FontWeight.bold)),
-                  )
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download Sample CSV Template'),
+                  ),
                 ],
               ),
             ),
@@ -370,26 +532,89 @@ class _UploadCenterScreenState extends ConsumerState<UploadCenterScreen> {
     );
   }
 
-  Widget _buildRequirement(String title, String desc) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
+  Widget _buildCsvPreviewPanel() {
+    if (_csvPreviewError != null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.shade100),
+        ),
+        child: Text(
+          _csvPreviewError!,
+          style: const TextStyle(
+            color: Colors.red,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0F172A))),
-                Text(desc,
-                    style:
-                        const TextStyle(color: Colors.grey, fontSize: 12)),
-              ],
+          const Text(
+            'CSV PREVIEW',
+            style: TextStyle(
+              color: Color(0xFF0F172A),
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _recordKeyColumn,
+            decoration: const InputDecoration(
+              labelText: 'Record Key Column',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: _csvHeaders
+                .map(
+                  (header) =>
+                      DropdownMenuItem(value: header, child: Text(header)),
+                )
+                .toList(),
+            onChanged: (value) => setState(() => _recordKeyColumn = value),
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowHeight: 36,
+              dataRowMinHeight: 36,
+              dataRowMaxHeight: 44,
+              columns: _csvHeaders
+                  .take(6)
+                  .map((header) => DataColumn(label: Text(header)))
+                  .toList(),
+              rows: _csvPreviewRows
+                  .map(
+                    (row) => DataRow(
+                      cells: _csvHeaders
+                          .take(6)
+                          .map(
+                            (header) => DataCell(
+                              Text(
+                                row[header] ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  )
+                  .toList(),
             ),
           ),
         ],

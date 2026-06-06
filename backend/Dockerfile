@@ -14,8 +14,10 @@ COPY --from=builder /app/target/*.jar app.jar
 
 # Run as non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
+RUN mkdir -p /app/uploads && chown -R spring:spring /app/uploads
 USER spring:spring
 
 EXPOSE 8080
 
 ENTRYPOINT ["java", "-XX:+UseZGC", "-Xmx2g", "-jar", "app.jar"]
+

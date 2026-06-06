@@ -5,11 +5,13 @@ import '../core/providers/workspace_unlock_provider.dart';
 class PasswordUnlockScreen extends ConsumerStatefulWidget {
   final String workspaceId;
   final String workspaceName;
+  final String? initialCode;
 
   const PasswordUnlockScreen({
     super.key,
     required this.workspaceId,
     required this.workspaceName,
+    this.initialCode,
   });
 
   @override
@@ -17,7 +19,13 @@ class PasswordUnlockScreen extends ConsumerStatefulWidget {
 }
 
 class _PasswordUnlockScreenState extends ConsumerState<PasswordUnlockScreen> {
-  final _passwordController = TextEditingController();
+  late final TextEditingController _passwordController;
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordController = TextEditingController(text: widget.initialCode ?? '');
+  }
 
   @override
   void dispose() {

@@ -9,9 +9,15 @@ class WorkspaceUnlockStateData {
   final WorkspaceUnlockState status;
   final String? errorMessage;
 
-  WorkspaceUnlockStateData({this.status = WorkspaceUnlockState.idle, this.errorMessage});
+  WorkspaceUnlockStateData({
+    this.status = WorkspaceUnlockState.idle,
+    this.errorMessage,
+  });
 
-  WorkspaceUnlockStateData copyWith({WorkspaceUnlockState? status, String? errorMessage}) {
+  WorkspaceUnlockStateData copyWith({
+    WorkspaceUnlockState? status,
+    String? errorMessage,
+  }) {
     return WorkspaceUnlockStateData(
       status: status ?? this.status,
       errorMessage: errorMessage ?? this.errorMessage,
@@ -19,14 +25,21 @@ class WorkspaceUnlockStateData {
   }
 }
 
-class WorkspaceUnlockNotifier extends StateNotifier<WorkspaceUnlockStateData> {
-  final ApiClient _apiClient;
-  final SecureStorage _secureStorage;
+class WorkspaceUnlockNotifier extends Notifier<WorkspaceUnlockStateData> {
+  late ApiClient _apiClient;
+  final SecureStorage _secureStorage = SecureStorage();
 
-  WorkspaceUnlockNotifier(this._apiClient, this._secureStorage) : super(WorkspaceUnlockStateData());
+  @override
+  WorkspaceUnlockStateData build() {
+    _apiClient = ref.watch(apiClientProvider);
+    return WorkspaceUnlockStateData();
+  }
 
   Future<bool> unlockWorkspace(String workspaceId, String accessCode) async {
-    state = state.copyWith(status: WorkspaceUnlockState.loading, errorMessage: null);
+    state = state.copyWith(
+      status: WorkspaceUnlockState.loading,
+      errorMessage: null,
+    );
 
     try {
       final response = await _apiClient.client.post(
@@ -40,29 +53,31 @@ class WorkspaceUnlockNotifier extends StateNotifier<WorkspaceUnlockStateData> {
         state = state.copyWith(status: WorkspaceUnlockState.success);
         return true;
       } else {
-        state = state.copyWith(status: WorkspaceUnlockState.error, errorMessage: 'Invalid response from server.');
+        state = state.copyWith(
+          status: WorkspaceUnlockState.error,
+          errorMessage: 'Invalid response from server.',
+        );
         return false;
       }
     } on DioException catch (e) {
-      final customMessage = e.error as String?; // Assuming our interceptor sets this
+      final customMessage =
+          e.error as String?; // Assuming our interceptor sets this
       state = state.copyWith(
-        status: WorkspaceUnlockState.error, 
-        errorMessage: customMessage ?? 'Incorrect code. Try again.'
+        status: WorkspaceUnlockState.error,
+        errorMessage: customMessage ?? 'Incorrect code. Try again.',
       );
       return false;
     } catch (e) {
       state = state.copyWith(
-        status: WorkspaceUnlockState.error, 
-        errorMessage: 'An unexpected error occurred. Please try again.'
+        status: WorkspaceUnlockState.error,
+        errorMessage: 'An unexpected error occurred. Please try again.',
       );
       return false;
     }
   }
 }
 
-final workspaceUnlockProvider = StateNotifierProvider<WorkspaceUnlockNotifier, WorkspaceUnlockStateData>((ref) {
-  final apiClient = ref.watch(apiClientProvider);
-  // SecureStorage is usually instantiated directly or via a provider, we'll instantiate it
-  final secureStorage = SecureStorage();
-  return WorkspaceUnlockNotifier(apiClient, secureStorage);
-});
+final workspaceUnlockProvider =
+    NotifierProvider<WorkspaceUnlockNotifier, WorkspaceUnlockStateData>(
+      WorkspaceUnlockNotifier.new,
+    );

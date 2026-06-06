@@ -22,8 +22,9 @@ public class CsvImportController {
     public ResponseEntity<UploadResponse> uploadCsv(
             @PathVariable UUID datasetId,
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "recordKeyColumn", required = false) String recordKeyColumn,
             @AuthenticationPrincipal User user
     ) {
-        return ResponseEntity.ok(csvImportService.uploadCsv(datasetId, file, user));
+        return ResponseEntity.ok(csvImportService.uploadCsv(datasetId, file, recordKeyColumn, user));
     }
 }

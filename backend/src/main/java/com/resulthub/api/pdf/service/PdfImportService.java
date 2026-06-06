@@ -17,6 +17,7 @@ import com.resulthub.api.workspace.enums.WorkspaceRole;
 import com.resulthub.api.workspace.repository.WorkspaceMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.scheduling.annotation.Async;
@@ -103,7 +104,7 @@ public class PdfImportService {
         List<DatasetRecord> batch = new ArrayList<>();
         int BATCH_SIZE = 1000;
 
-        try (PDDocument document = PDDocument.load(filePath.toFile())) {
+        try (PDDocument document = Loader.loadPDF(filePath.toFile())) {
             PDFTextStripper pdfStripper = new PDFTextStripper();
             pdfStripper.setSortByPosition(true); // Attempt to sort texts by coordinates
             String text = pdfStripper.getText(document);

@@ -12,6 +12,7 @@ import com.resulthub.api.user.User;
 import com.resulthub.api.workspace.entity.WorkspaceMember;
 import com.resulthub.api.workspace.enums.WorkspaceRole;
 import com.resulthub.api.workspace.repository.WorkspaceMemberRepository;
+import com.resulthub.api.workspace.service.WorkspaceAccessService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -34,6 +35,8 @@ public class DatasetRecordService {
     private final WorkspaceMemberRepository memberRepository;
     private final SchemaValidationService validationService;
     private final com.resulthub.api.security.WorkspaceTokenService workspaceTokenService;
+    private final WorkspaceAccessService workspaceAccessService;
+    private final DatasetRecordEventService eventService;
 
     @Transactional
     public RecordResponse createRecord(UUID datasetId, RecordRequest request, User user) {
@@ -57,19 +60,23 @@ public class DatasetRecordService {
 
         record = recordRepository.save(record);
         log.info("AUDIT: RECORD_CREATED - Record {} created in Dataset {} by User {}", record.getId(), datasetId, user.getId());
-        return mapToResponse(record);
+        RecordResponse response = mapToResponse(record);
+        eventService.publishRecordChanged(datasetId, "record-created", response);
+        return response;
     }
 
-    public Page<RecordResponse> getRecords(UUID datasetId, Pageable pageable) {
-        // Validation for workspace visibility should ideally happen upstream or via a facade,
-        // assuming viewer has access for now based on controller checks.
+    public Page<RecordResponse> getRecords(UUID datasetId, Pageable pageable, User user, String authHeader) {
+        Dataset dataset = datasetRepository.findByIdAndNotDeleted(datasetId)
+                .orElseThrow(() -> new RuntimeException("Dataset not found"));
+        workspaceAccessService.validateCanView(dataset.getWorkspace(), user, authHeader);
         return recordRepository.findByDatasetIdAndNotDeleted(datasetId, pageable)
                 .map(this::mapToResponse);
     }
 
-    public RecordResponse getRecord(UUID recordId) {
+    public RecordResponse getRecord(UUID recordId, User user, String authHeader) {
         DatasetRecord record = recordRepository.findByIdAndNotDeleted(recordId)
                 .orElseThrow(() -> new RuntimeException("Record not found"));
+        workspaceAccessService.validateCanView(record.getDataset().getWorkspace(), user, authHeader);
         return mapToResponse(record);
     }
 
@@ -106,7 +113,9 @@ public class DatasetRecordService {
 
         record = recordRepository.save(record);
         log.info("AUDIT: RECORD_UPDATED - Record {} updated by User {}", record.getId(), user.getId());
-        return mapToResponse(record);
+        RecordResponse response = mapToResponse(record);
+        eventService.publishRecordChanged(record.getDataset().getId(), "record-updated", response);
+        return response;
     }
 
     @Transactional
@@ -119,6 +128,14 @@ public class DatasetRecordService {
         record.setDeletedAt(LocalDateTime.now());
         recordRepository.save(record);
         log.info("AUDIT: RECORD_DELETED - Record {} soft-deleted by User {}", record.getId(), user.getId());
+        eventService.publishRecordChanged(record.getDataset().getId(), "record-deleted", mapToResponse(record));
+    }
+
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamRecords(UUID datasetId, User user, String authHeader) {
+        Dataset dataset = datasetRepository.findByIdAndNotDeleted(datasetId)
+                .orElseThrow(() -> new RuntimeException("Dataset not found"));
+        workspaceAccessService.validateCanView(dataset.getWorkspace(), user, authHeader);
+        return eventService.subscribe(datasetId);
     }
 
     private void validateEditorAccess(UUID workspaceId, UUID userId) {

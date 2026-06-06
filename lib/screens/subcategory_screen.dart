@@ -16,6 +16,21 @@ class SubcategoryScreen extends StatelessWidget {
   const SubcategoryScreen({super.key, required this.domain});
 
   void _navigateToFinal(BuildContext context, Subcategory subcategory) {
+    if (subcategory.workspaceId != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LocalWorkspaceScreen(
+            workspaceId: subcategory.workspaceId!,
+            workspaceName: subcategory.name,
+            domain: domain,
+            subcategory: subcategory,
+          ),
+        ),
+      );
+      return;
+    }
+
     if (subcategory.status == EventStatus.upcoming) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -28,23 +43,81 @@ class SubcategoryScreen extends StatelessWidget {
     }
 
     if (domain.type == DomainType.sport) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => SportsFeedScreen(domain: domain, subcategory: subcategory)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              SportsFeedScreen(domain: domain, subcategory: subcategory),
+        ),
+      );
     } else if (domain.type == DomainType.government) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => GovtDetailScreen(domain: domain, subcategory: subcategory)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              GovtDetailScreen(domain: domain, subcategory: subcategory),
+        ),
+      );
     } else if (domain.type == DomainType.politics) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => PoliticsScreen(domain: domain, subcategory: subcategory)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              PoliticsScreen(domain: domain, subcategory: subcategory),
+        ),
+      );
     } else if (domain.type == DomainType.finance) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => FinanceScreen(domain: domain, subcategory: subcategory)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              FinanceScreen(domain: domain, subcategory: subcategory),
+        ),
+      );
     } else if (domain.type == DomainType.entertainment) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => EntertainmentScreen(domain: domain, subcategory: subcategory)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              EntertainmentScreen(domain: domain, subcategory: subcategory),
+        ),
+      );
     } else if (domain.type == DomainType.tech) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => TechScreen(domain: domain, subcategory: subcategory)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              TechScreen(domain: domain, subcategory: subcategory),
+        ),
+      );
     } else if (domain.type == DomainType.law) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => LawScreen(domain: domain, subcategory: subcategory)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              LawScreen(domain: domain, subcategory: subcategory),
+        ),
+      );
     } else if (domain.type == DomainType.hyperLocal) {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => LocalWorkspaceScreen(domain: domain, subcategory: subcategory)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => LocalWorkspaceScreen(
+            workspaceId: subcategory.id,
+            workspaceName: subcategory.name,
+            domain: domain,
+            subcategory: subcategory,
+          ),
+        ),
+      );
     } else {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => CredentialScreen(domain: domain, subcategory: subcategory)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              CredentialScreen(domain: domain, subcategory: subcategory),
+        ),
+      );
     }
   }
 
@@ -55,7 +128,13 @@ class SubcategoryScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: const Color(0xFFF8F9FA),
         appBar: AppBar(
-          title: Text(domain.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+          title: Text(
+            domain.name.toUpperCase(),
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.2,
+            ),
+          ),
           centerTitle: false,
           backgroundColor: Colors.white,
           foregroundColor: const Color(0xFF0F172A),
@@ -65,7 +144,10 @@ class SubcategoryScreen extends StatelessWidget {
             unselectedLabelColor: Colors.grey,
             indicatorColor: domain.displayColor,
             indicatorWeight: 3,
-            labelStyle: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1,
+            ),
             unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
             tabs: [
               Tab(text: 'LIVE'),
@@ -86,13 +168,19 @@ class SubcategoryScreen extends StatelessWidget {
   }
 
   Widget _buildList(BuildContext context, EventStatus status) {
-    final filteredList = domain.subcategories.where((s) => s.status == status).toList();
+    final filteredList = domain.subcategories
+        .where((s) => s.status == status)
+        .toList();
 
     if (filteredList.isEmpty) {
       return Center(
         child: Text(
           'No ${status.name.toUpperCase()} events found.',
-          style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16),
+          style: const TextStyle(
+            color: Colors.grey,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
         ),
       );
     }
@@ -115,7 +203,11 @@ class SubcategoryScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.grey.shade200),
               boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4)),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
               ],
             ),
             child: Column(
@@ -126,45 +218,76 @@ class SubcategoryScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: badgeColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: badgeColor.withValues(alpha: 0.2)),
+                        border: Border.all(
+                          color: badgeColor.withValues(alpha: 0.2),
+                        ),
                       ),
                       child: Text(
                         domain.name.toUpperCase(),
-                        style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                        style: TextStyle(
+                          color: badgeColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
-                    const Icon(Icons.bookmark_border, color: Colors.grey, size: 20),
+                    const Icon(
+                      Icons.bookmark_border,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Middle Section: Title & Agency
                 Text(
                   sub.name,
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF0F172A), height: 1.3),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    color: Color(0xFF0F172A),
+                    height: 1.3,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Scraped automatically from: ${sub.agencyName ?? "Official Board"}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Bottom Row: Date & View Details
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
+                        const Icon(
+                          Icons.calendar_today,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           sub.dateStr ?? '6/1/2026',
-                          style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -172,10 +295,18 @@ class SubcategoryScreen extends StatelessWidget {
                       children: const [
                         Text(
                           'View Details',
-                          style: TextStyle(color: Color(0xFF3B82F6), fontWeight: FontWeight.w900, fontSize: 14),
+                          style: TextStyle(
+                            color: Color(0xFF3B82F6),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
                         ),
                         SizedBox(width: 4),
-                        Icon(Icons.arrow_forward, size: 16, color: Color(0xFF3B82F6)),
+                        Icon(
+                          Icons.arrow_forward,
+                          size: 16,
+                          color: Color(0xFF3B82F6),
+                        ),
                       ],
                     ),
                   ],

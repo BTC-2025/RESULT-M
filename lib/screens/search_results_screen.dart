@@ -176,7 +176,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               } else if (domain.type == DomainType.law) {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => LawScreen(domain: domain, subcategory: sub)));
               } else if (domain.type == DomainType.hyperLocal) {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => LocalWorkspaceScreen(domain: domain, subcategory: sub)));
+                Navigator.push(context, MaterialPageRoute(builder: (context) => LocalWorkspaceScreen(workspaceId: sub.id, workspaceName: sub.name, domain: domain, subcategory: sub)));
               } else {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => CredentialScreen(domain: domain, subcategory: sub)));
               }

@@ -46,3 +46,6 @@ app.*.map.json
 
 # Backend
 backend/target/
+.env
+.env.*
+!.env.example

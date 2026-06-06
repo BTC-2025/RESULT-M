@@ -1,5 +1,7 @@
 package com.resulthub.api.workspace.repository;
 
+import com.resulthub.api.dataset.enums.DatasetStatus;
+import com.resulthub.api.dataset.enums.DomainType;
 import com.resulthub.api.workspace.entity.Workspace;
 import com.resulthub.api.workspace.enums.VisibilityMode;
 import org.springframework.data.domain.Page;
@@ -24,4 +26,20 @@ public interface WorkspaceRepository extends JpaRepository<Workspace, UUID> {
 
     @Query("SELECT w FROM Workspace w WHERE w.visibility = :visibility AND w.deletedAt IS NULL")
     Page<Workspace> findByVisibilityAndNotDeleted(@Param("visibility") VisibilityMode visibility, Pageable pageable);
+
+    @Query("""
+            SELECT DISTINCT w FROM Workspace w
+            JOIN Dataset d ON d.workspace = w
+            WHERE w.visibility = :visibility
+              AND w.deletedAt IS NULL
+              AND d.deletedAt IS NULL
+              AND d.status = :status
+              AND d.domainType = :domainType
+            """)
+    Page<Workspace> findByVisibilityAndPublishedDomainAndNotDeleted(
+            @Param("visibility") VisibilityMode visibility,
+            @Param("status") DatasetStatus status,
+            @Param("domainType") DomainType domainType,
+            Pageable pageable
+    );
 }
