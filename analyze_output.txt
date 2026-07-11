@@ -1,0 +1,17 @@
+Analyzing Beta SoftNet...
+
+  error - lib\features\home\data\home_feed_repository.dart:229:14 - Undefined name 'homeInterestTagsProvider'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\features\home\data\home_feed_repository.dart:229:14 - Undefined name 'homeInterestTagsProvider'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\services\api_service.dart:1022:13 - Undefined name '_useOfflineFallbacks'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\services\api_service.dart:1022:13 - Undefined name '_useOfflineFallbacks'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\services\api_service.dart:1022:59 - The method '_offlineVoteBoxes' isn't defined for the type 'ApiService'. Try correcting the name to the name of an existing method, or defining a method named '_offlineVoteBoxes'. - undefined_method
+  error - lib\services\api_service.dart:1022:59 - The method '_offlineVoteBoxes' isn't defined for the type 'ApiService'. Try correcting the name to the name of an existing method, or defining a method named '_offlineVoteBoxes'. - undefined_method
+  error - lib\services\api_service.dart:1033:25 - Undefined name '_useOfflineFallbacks'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\services\api_service.dart:1033:25 - Undefined name '_useOfflineFallbacks'. Try correcting the name to one that is defined, or defining the name. - undefined_identifier
+  error - lib\services\api_service.dart:1034:11 - The method '_offlineVoteBoxes' isn't defined for the type 'ApiService'. Try correcting the name to the name of an existing method, or defining a method named '_offlineVoteBoxes'. - undefined_method
+  error - lib\services\api_service.dart:1034:11 - The method '_offlineVoteBoxes' isn't defined for the type 'ApiService'. Try correcting the name to the name of an existing method, or defining a method named '_offlineVoteBoxes'. - undefined_method
+  error - test\home_feed_repository_test.dart:22:24 - The function 'MockHomeFeedRepository' isn't defined. Try importing the library that defines 'MockHomeFeedRepository', correcting the name to the name of an existing function, or defining a function named 'MockHomeFeedRepository'. - undefined_function
+  error - test\home_feed_repository_test.dart:40:24 - The function 'MockHomeFeedRepository' isn't defined. Try importing the library that defines 'MockHomeFeedRepository', correcting the name to the name of an existing function, or defining a function named 'MockHomeFeedRepository'. - undefined_function
+  error - test\home_feed_repository_test.dart:71:24 - The function 'MockHomeFeedRepository' isn't defined. Try importing the library that defines 'MockHomeFeedRepository', correcting the name to the name of an existing function, or defining a function named 'MockHomeFeedRepository'. - undefined_function
+
+13 issues found.

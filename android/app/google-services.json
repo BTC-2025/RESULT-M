@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "909980872558",
+    "project_id": "tutorai-1r0ti",
+    "storage_bucket": "tutorai-1r0ti.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:909980872558:android:33ee1fd02ed289c9731b7f",
+        "android_client_info": {
+          "package_name": "com.example.result_publishing_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDrPB9YWvRE3heu1Dc6PdpTtaj7zzMgEXc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
