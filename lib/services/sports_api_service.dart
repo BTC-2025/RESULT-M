@@ -27,7 +27,7 @@ Dio _createDio(String baseUrl, {String? headerKey, String? headerValue, String? 
 
 // ─── Service Provider ─────────────────────────────────────────────────────────
 final sportsApiServiceProvider = Provider<SportsApiService>((ref) {
-  final sportsApiKey = dotenv.env['SPORTSRC_V2_KEY'] ?? 'c9dbeff1fb6ae65f923d43a1705f2f6f';
+  final sportsApiKey = dotenv.env['SPORTSRC_V2_KEY'] ?? '';
   final cricApiKey = dotenv.env['CRIC_API_KEY'] ?? '';
   return SportsApiService(
     footballDio: _createDio('https://api.sportsrc.org/v2', headerKey: 'X-API-KEY', headerValue: sportsApiKey),
