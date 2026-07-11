@@ -89,13 +89,13 @@ class AppTheme {
     ink: Color(0xFFE6EDF3), // Softer, premium white
     inkMuted: Color(0xFF8B949E),
     inkFaint: Color(0xFF6E7681),
-    orange: Color(0xFFFF5A36), // Vibrant modern coral/orange
-    orangeGlow: Color(0xFFFF7A5C),
-    liveRed: Color(0xFFF85149), // Sleek alert red
-    green: Color(0xFF238636), // Rich emerald green
-    blue: Color(0xFF2F81F7), // Vivid royal blue
-    purple: Color(0xFFA371F7), // Elegant deep purple
-    amber: Color(0xFFD29922),
+    orange: Color(0xFF6C5CE7), // Web Project Primary Purple
+    orangeGlow: Color(0xFF8B5CF6), // Web Project Secondary Purple
+    liveRed: Color(0xFFEF4444), // Web Project Danger Red
+    green: Color(0xFF10B981), // Web Project Success Green
+    blue: Color(0xFF2F81F7), 
+    purple: Color(0xFFA371F7), 
+    amber: Color(0xFFF59E0B), // Web Project Warning
     teal: Color(0xFF1C7A70),
     pink: Color(0xFFED468B),
     rail: Color(0xFF0D1117),
@@ -109,16 +109,16 @@ class AppTheme {
     surfaceAlt: Color(0xFFF7F9F9), // Very subtle off-white for filled inputs
     border: Color(0xFFEFF3F4), // Ultra-light border (Twitter style)
     borderBold: Color(0xFFCFD9DE),
-    ink: Color(0xFF0F1419), // Deep rich black for primary text
-    inkMuted: Color(0xFF536471), // Balanced slate for secondary text
-    inkFaint: Color(0xFF8B98A5),
-    orange: Color(0xFFFF5A36), // Vibrant modern coral
-    orangeGlow: Color(0xFFFF7A5C),
-    liveRed: Color(0xFFF91880), // Rich magenta-red
-    green: Color(0xFF00BA7C), // Vibrant mint green
-    blue: Color(0xFF1D9BF0), // Classic social electric blue
-    purple: Color(0xFF8B5CF6), // Rich violet
-    amber: Color(0xFFFFD400),
+    ink: Color(0xFF171717), // Web Project Foreground
+    inkMuted: Color(0xFF6B7280), // Web Project Muted Foreground
+    inkFaint: Color(0xFF9CA3AF),
+    orange: Color(0xFF6C5CE7), // Web Project Primary Purple
+    orangeGlow: Color(0xFF8B5CF6), // Web Project Secondary Purple
+    liveRed: Color(0xFFEF4444), // Web Project Danger Red
+    green: Color(0xFF10B981), // Web Project Success Green
+    blue: Color(0xFF1D9BF0), 
+    purple: Color(0xFFA855F7), // Web Project Accent
+    amber: Color(0xFFF59E0B), // Web Project Warning
     teal: Color(0xFF14B8A6),
     pink: Color(0xFFF91880),
     rail: Color(0xFFFFFFFF),
@@ -466,15 +466,15 @@ class AppColors {
   static const surfaceAlt = Color(0xFFF1F5F9);
   static const border = Color(0xFFE2E8F0);
   static const borderBold = Color(0xFFCBD5E1);
-  static const ink = Color(0xFF0F172A);
-  static const inkMuted = Color(0xFF64748B);
-  static const inkFaint = Color(0xFF94A3B8);
-  static const orange = Color(0xFFFF5A36);
-  static const orangeGlow = Color(0xFFFF7A5C);
-  static const liveRed = Color(0xFFE11D48);
+  static const ink = Color(0xFF171717);
+  static const inkMuted = Color(0xFF6B7280);
+  static const inkFaint = Color(0xFF9CA3AF);
+  static const orange = Color(0xFF6C5CE7);
+  static const orangeGlow = Color(0xFF8B5CF6);
+  static const liveRed = Color(0xFFEF4444);
   static const green = Color(0xFF10B981);
   static const blue = Color(0xFF1D9BF0);
-  static const purple = Color(0xFF8B5CF6);
+  static const purple = Color(0xFFA855F7);
   static const amber = Color(0xFFF59E0B);
   static const teal = Color(0xFF14B8A6);
   static const pink = Color(0xFFEC4899);

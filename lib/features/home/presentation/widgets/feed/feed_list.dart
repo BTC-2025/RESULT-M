@@ -129,7 +129,7 @@ class _FeedListViewState extends ConsumerState<FeedListView> {
               else
                 SliverList.separated(
                   itemCount: posts.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (context, _) => Divider(height: 1, thickness: 1, color: context.colors.border),
                   itemBuilder: (context, index) {
                     final post = posts[index];
                     return FeedAppear(

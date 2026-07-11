@@ -38,21 +38,9 @@ class FeedPostShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       decoration: BoxDecoration(
         color: context.colors.surface,
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: context.colors.border),
-        boxShadow: isDark
-            ? null
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.045),
-                  offset: const Offset(0, 2),
-                  blurRadius: 10,
-                ),
-              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1434,37 +1422,57 @@ class _EngagementRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _ActionIcon(
-            icon: post.isLiked
-                ? Icons.favorite_rounded
-                : Icons.favorite_border_rounded,
-            activeColor: context.colors.liveRed,
-            isActive: post.isLiked,
-            count: post.likeCount,
-            onTap: onLike,
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _ActionIcon(
+                icon: post.isLiked
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                activeColor: context.colors.liveRed,
+                isActive: post.isLiked,
+                count: post.likeCount,
+                onTap: onLike,
+              ),
+            ),
           ),
-          _ActionIcon(
-            icon: Icons.mode_comment_outlined,
-            count: post.commentCount,
-            onTap: onComment,
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _ActionIcon(
+                icon: Icons.mode_comment_outlined,
+                count: post.commentCount,
+                onTap: onComment,
+              ),
+            ),
           ),
-          const Spacer(),
-          _ActionIcon(
-            icon: Icons.ios_share_rounded,
-            onTap:
-                onShare ??
-                () => SharePlus.instance.share(
-                  ShareParams(text: ShareLinks.post(post.id)),
-                ),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _ActionIcon(
+                icon: Icons.ios_share_rounded,
+                onTap:
+                    onShare ??
+                    () => SharePlus.instance.share(
+                      ShareParams(text: ShareLinks.post(post.id)),
+                    ),
+              ),
+            ),
           ),
-          _ActionIcon(
-            icon: post.isSaved
-                ? Icons.bookmark_rounded
-                : Icons.bookmark_border_rounded,
-            activeColor: context.colors.purple,
-            isActive: post.isSaved,
-            onTap: onSave,
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _ActionIcon(
+                icon: post.isSaved
+                    ? Icons.bookmark_rounded
+                    : Icons.bookmark_border_rounded,
+                activeColor: context.colors.purple,
+                isActive: post.isSaved,
+                onTap: onSave,
+              ),
+            ),
           ),
         ],
       ),

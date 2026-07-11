@@ -16,10 +16,10 @@ class HomeSliverAppBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return SliverAppBar(
       floating: true,
-      snap: true,
+      pinned: true,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
-      backgroundColor: context.colors.bg,
+      backgroundColor: context.colors.bg.withValues(alpha: 0.92),
       titleSpacing: 16,
       title: Row(
         children: [
