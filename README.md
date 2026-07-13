@@ -1,58 +1,54 @@
 # ResultHub Mobile Application
 
-This repository contains the mobile application for the ResultHub platform. Built with Flutter, it provides a seamless and responsive native experience for both iOS and Android users.
+This repository contains the official mobile application for ResultHub, deployed to Android and iOS platforms.
 
-## 🚀 Technology Stack
+## 🎯 Purpose
+The mobile app is the flagship product of the ResultHub ecosystem. It provides end-users with a native, highly responsive, and immersive social experience directly on their smartphones. Features include endless scrolling feeds, complex UI animations, map integrations, and secure device-level authentication.
 
-- **Framework:** Flutter
+## 📦 What It Has
+- **Feature-First Architecture:** The codebase is split into discrete features (e.g., `lib/features/auth`, `lib/features/home`) for rapid scalability.
+- **Robust State Management:** Powered exclusively by `Riverpod` for reactive data fetching and global state mutation without prop drilling.
+- **Type-Safe Routing:** Navigation is handled by `GoRouter`, allowing for deep-linking and modular page transitions.
+- **Media Support:** Integrates camera (`image_picker`), video playback (`video_player`), and mapping capabilities (`flutter_map`).
+- **Custom Theming:** A highly customized, premium dark-mode focused design system leveraging `AppColorsExtension`.
+
+## 🛠️ How It Is Built
+### Tech Stack
+- **Framework:** [Flutter](https://flutter.dev/) (SDK ^3.12.0)
 - **Language:** Dart
-- **State Management:** Riverpod
-- **Environment Management:** flutter_dotenv
+- **State Management:** Riverpod (`flutter_riverpod`)
+- **Networking:** Dio
+- **Local Storage:** `shared_preferences`, `flutter_secure_storage`
 
-## 📋 Prerequisites
+### Prerequisites
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) installed and added to your system PATH.
+- Android Studio or Xcode (for emulation/building).
+- A running instance of the `backend-mern` API.
 
-Before you begin, ensure you have met the following requirements:
-* **Flutter SDK** installed on your machine.
-* **Android Studio** (for Android development) or **Xcode** (for iOS development).
-* A physical device or emulator/simulator configured for testing.
+### Getting Started
 
-## 🛠️ Getting Started
+1. **Install Dependencies**
+   Navigate to the root of the project and pull the dart packages:
+   ```bash
+   flutter pub get
+   ```
 
-Follow these steps to set up the mobile application locally:
+2. **Environment Configuration**
+   Create a `.env` file in the root directory to point to your backend API.
+   *Note: If testing on an Android emulator locally, you must use `10.0.2.2` instead of `localhost`.*
+   ```env
+   API_BASE_URL=http://10.0.2.2:3001/api
+   ```
 
-### 1. Install Dependencies
+3. **Run the Application**
+   Connect a physical device or start an emulator, then run:
+   ```bash
+   flutter run
+   ```
 
-Fetch all the required Dart packages:
+### Building for Release (Android)
+To build a lightweight, optimized APK for modern Android devices (avoiding the massive "fat" APK), run the split command:
 ```bash
-flutter pub get
+flutter build apk --split-per-abi
 ```
-
-### 2. Environment Setup
-
-Create a `.env` file in the root directory to store your API keys and configuration variables:
-```bash
-# Example .env configuration
-SPORTS_API_KEY=your_key_here
-CRIC_API_KEY=your_key_here
-# Any other required keys
-```
-*Make sure `.env` is never committed to GitHub!*
-
-### 3. Run the App
-
-Launch the app on your connected device or emulator:
-```bash
-flutter run
-```
-
-## 📁 Repository Structure
-
-* `lib/screens/` - Contains the UI screens of the application.
-* `lib/widgets/` - Contains reusable custom UI components.
-* `lib/services/` - Contains API services and business logic integrations.
-* `lib/core/` - Contains core utilities, network clients, and configurations.
-* `android/` & `ios/` - Platform-specific configuration files.
-
-## 🤝 Contributing
-
-When contributing, please ensure that your code follows Dart formatting guidelines (`flutter format .`) and that all tests pass (`flutter test`) before submitting a Pull Request.
+*Your optimized build will be located at: `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`*
